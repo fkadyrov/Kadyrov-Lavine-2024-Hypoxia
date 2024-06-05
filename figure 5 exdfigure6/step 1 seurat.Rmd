@@ -1,0 +1,311 @@
+
+```{r}
+# arg1zsgr d2 d30 IRI data
+
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+```
+
+```{r}
+setwd("E:/arg1zsgr single cell/unmapped analysis")
+
+#ZNd2
+znd2_dir <- 'E:/arg1zsgr single cell/MGI4129_KLAF-VPenna-ZNd2/outs/filtered_feature_bc_matrix'
+znd2.data <- Read10X(data.dir =znd2_dir)
+ZNd2 <- CreateSeuratObject(counts = znd2.data, min.cells = 3, min.features = 200)
+ZNd2$condition <- "ZNd2"
+
+
+#ZPd2
+zpd2_dir <- 'E:/arg1zsgr single cell/MGI4129_KLAF-VPenna-ZPd2/outs/filtered_feature_bc_matrix'
+zpd2.data <- Read10X(data.dir =zpd2_dir)
+ZPd2 <- CreateSeuratObject(counts = zpd2.data, min.cells = 3, min.features = 200)
+ZPd2$condition <- "ZPd2"
+
+
+#ZN30
+znd30_dir <- 'E:/arg1zsgr single cell/MGI4212_KLAF-VPenna-ZN30/outs/filtered_feature_bc_matrix'
+znd30.data <- Read10X(data.dir =znd30_dir)
+ZNd30 <- CreateSeuratObject(counts = znd30.data, min.cells = 3, min.features = 200)
+ZNd30$condition <- "ZNd30"
+
+#ZP30
+zpd30_dir <- 'E:/arg1zsgr single cell/MGI4212_KLAF-VPenna-ZP30/outs/filtered_feature_bc_matrix'
+zpd30.data <- Read10X(data.dir =zpd30_dir)
+ZPd30 <- CreateSeuratObject(counts = zpd30.data, min.cells = 3, min.features = 200)
+ZPd30$condition <- "ZPd30"
+
+merged <- merge(ZNd2, y = c(ZPd2, ZNd30, ZPd30))
+```
+#QC
+```{r}
+merged[["propmt"]] <- PercentageFeatureSet(merged, pattern = "^mt-")
+VlnPlot(merged, features = c("nFeature_RNA", "nCount_RNA", "propmt"), ncol = 3, pt.size=0)
+```
+
+```{r}
+merged
+```
+
+```{r}
+merged2 <- subset(merged, subset = nFeature_RNA > 500 & nFeature_RNA < 5000 & propmt < 10 & nCount_RNA < 20000)
+```
+
+```{r}
+merged2
+```
+
+```{r}
+png(filename="./qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged2, features = c("nFeature_RNA", "nCount_RNA", "propmt"), group.by = "orig.ident", ncol = 3, pt.size=0)
+dev.off()
+```
+
+#harmony
+
+```{r}
+DefaultAssay(merged2) <- 'RNA'
+merged2 <- SCTransform(merged2, vars.to.regress = c("propmt", "nCount_RNA"))
+
+merged2 <- RunPCA(merged2, npcs=100, verbose=TRUE)
+merged2 <- RunHarmony(merged2, c("condition"), reduction = "pca", reduction.save = "harmony", assay.use = "SCT")
+```
+
+```{r}
+ElbowPlot(merged2, ndims = 50)
+```
+
+```{r}
+merged2 <- RunUMAP(merged2, reduction = "harmony", dims = 1:40)
+merged2 <- FindNeighbors(merged2, reduction = "harmony", dims = 1:40)
+merged2 <- FindClusters(merged2, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5), verbose = TRUE)
+
+saveRDS(merged2, "./merged2.rds")
+```
+
+```{r}
+merged2$condition <- factor(merged2$condition, levels = c("ZNd2", "ZPd2", "ZNd30", "ZPd30"))
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.4")
+
+```
+
+```{r}
+png(filename="./merged2 0.4 res.png", width=20, height=20, units="cm", res=300)
+merged2$condition <- factor(merged2$condition, levels = c("ZNd2", "ZPd2", "ZNd30", "ZPd30"))
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.4")
+dev.off()
+```
+
+```{r}
+VlnPlot(merged2, features = "nCount_RNA", group.by = "SCT_snn_res.0.4", pt.size = 0)
+VlnPlot(merged2, features = "propmt", group.by = "SCT_snn_res.0.4", pt.size = 0)
+VlnPlot(merged2, features = "Arg1", group.by = "SCT_snn_res.0.4", pt.size = 0)
+```
+
+```{r}
+FeaturePlot(merged2, features = "Foxp1", reduction = "umap")
+```
+
+```{r}
+
+DefaultAssay(merged2) <- 'SCT'
+Idents(merged2) <- "SCT_snn_res.0.4"
+rna.markers <- FindAllMarkers(merged2, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged2_DGE_GEX_res0.4.csv", quote = FALSE)
+```
+
+#Remove Non Myeloid
+```{r}
+Idents(merged2) <- "SCT_snn_res.0.4"
+
+#0 mac
+#1 mac
+#2 mac
+#3 mac
+#4 mono
+#5 mac
+#6 mito
+#7 proliferating
+#8 endothelial
+#9 fibroblast
+#10 mac
+#11 mac
+#12 mac
+#13 neutrophil
+#14 mac
+#15 lymphoid
+
+merged3 <- subset(merged2, idents = c('0', '1', '2', '3', '4', '5', '7', '10', '11', '12', '14'))
+```
+
+#harmony
+
+```{r}
+DefaultAssay(merged3) <- 'RNA'
+merged3 <- SCTransform(merged3, vars.to.regress = c("propmt", "nCount_RNA"))
+
+merged3 <- RunPCA(merged3, npcs=100, verbose=TRUE)
+merged3 <- RunHarmony(merged3, c("condition"), reduction = "pca", reduction.save = "harmony", assay.use = "SCT")
+```
+
+```{r}
+ElbowPlot(merged3, ndims = 50)
+```
+
+```{r}
+merged3 <- RunUMAP(merged3, reduction = "harmony", dims = 1:40)
+merged3 <- FindNeighbors(merged3, reduction = "harmony", dims = 1:40)
+merged3 <- FindClusters(merged3, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+saveRDS(merged3, "./merged3.rds")
+```
+
+```{r}
+merged3$condition <- factor(merged3$condition, levels = c("ZNd2", "ZPd2", "ZNd30", "ZPd30"))
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5")
+
+```
+
+```{r}
+FeaturePlot(merged3, features = "Lyve1", reduction = "umap")
+FeaturePlot(merged3, features = "Arg1", reduction = "umap")
+```
+
+```{r}
+VlnPlot(merged3, features = "nCount_RNA", group.by = "SCT_snn_res.0.5", pt.size = 0)
+VlnPlot(merged3, features = "propmt", group.by = "SCT_snn_res.0.5", pt.size = 0)
+VlnPlot(merged3, features = "Arg1", group.by = "SCT_snn_res.0.5", pt.size = 0)
+VlnPlot(merged3, features = "Cd163", group.by = "SCT_snn_res.0.5", pt.size = 0)
+```
+
+```{r}
+png(filename="./merged3 0.5 res.png", width=20, height=20, units="cm", res=300)
+merged3$condition <- factor(merged3$condition, levels = c("ZNd2", "ZPd2", "ZNd30", "ZPd30"))
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5")
+dev.off()
+```
+
+```{r}
+
+DefaultAssay(merged3) <- 'SCT'
+Idents(merged3) <- "SCT_snn_res.0.5"
+rna.markers <- FindAllMarkers(merged3, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged3_DGE_GEX_res0.4.csv", quote = FALSE)
+```
+
+#Remove Non Myeloid
+```{r}
+Idents(merged3) <- "SCT_snn_res.0.5"
+
+#0 mac
+#1 mono
+#2 mac
+#3 mac
+#4 mac
+#5 mono
+#6 mac
+#7 res
+#8 prolif
+#9 mac
+#10 mac
+#11 mac
+#12 mac
+#13 junk
+#14 mac
+
+merged4 <- subset(merged3, idents = c('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '14'))
+```
+
+#harmony
+
+```{r}
+DefaultAssay(merged4) <- 'RNA'
+merged4 <- SCTransform(merged4, vars.to.regress = c("propmt", "nCount_RNA"))
+
+merged4 <- RunPCA(merged4, npcs=100, verbose=TRUE)
+merged4 <- RunHarmony(merged4, c("condition"), reduction = "pca", reduction.save = "harmony", assay.use = "SCT")
+```
+
+```{r}
+ElbowPlot(merged4, ndims = 50)
+```
+
+```{r}
+merged4 <- RunUMAP(merged4, reduction = "harmony", dims = 1:40)
+merged4 <- FindNeighbors(merged4, reduction = "harmony", dims = 1:40)
+merged4 <- FindClusters(merged4, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+saveRDS(merged4, "./merged4.rds")
+```
+
+```{r}
+merged4$condition <- factor(merged4$condition, levels = c("ZNd2", "ZPd2", "ZNd30", "ZPd30"))
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.2")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.3")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.4")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.6")
+```
+
+```{r}
+FeaturePlot(merged3, features = "Lyve1", reduction = "umap")
+FeaturePlot(merged3, features = "Arg1", reduction = "umap")
+```
+
+```{r}
+VlnPlot(merged4, features = "nCount_RNA", group.by = "SCT_snn_res.0.3", pt.size = 0)
+VlnPlot(merged4, features = "propmt", group.by = "SCT_snn_res.0.3", pt.size = 0)
+VlnPlot(merged4, features = "Arg1", group.by = "SCT_snn_res.0.3", pt.size = 0)
+VlnPlot(merged4, features = "Cd163", group.by = "SCT_snn_res.0.3", pt.size = 0)
+```
+
+```{r}
+png(filename="./merged4 0.3 res.png", width=20, height=20, units="cm", res=300)
+merged4$condition <- factor(merged4$condition, levels = c("ZNd2", "ZPd2", "ZNd30", "ZPd30"))
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.3")
+dev.off()
+```
+
+```{r}
+DefaultAssay(merged4) <- 'SCT'
+Idents(merged4) <- "SCT_snn_res.0.3"
+rna.markers <- FindAllMarkers(merged4, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged4_DGE_GEX_res0.3.csv", quote = FALSE)
+```
+
+```{r}
+myeloid <- readRDS('./merged4.rds')
+```
+
+```{r}
+saveRDS(myeloid, "./unmapped harmony.rds")
+```
+
+```{r}
+myeloid <- readRDS('./unmapped harmony.rds')
+```
+
+#VlnPlot
+```{r}
+png(filename="./unmapped harmony Arg1 VlnPlot.png", width=40, height=20, units="cm", res=300)
+VlnPlot(myeloid, features = "Arg1", group.by = "condition")
+dev.off()
+```
+
+
