@@ -1,0 +1,902 @@
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+```
+
+```{r}
+setwd("D:/arg1zsgr hif1a htx single cell/no harmony/")
+
+#ZNWT5
+znwt5_dir <- 'D:/arg1zsgr hif1a htx single cell/Lavine_MGI4617_10x/MGI4617_KLAF-Vpenna-ZNWT5/outs/filtered_feature_bc_matrix'
+znwt5.data <- Read10X(data.dir =znwt5_dir)
+znwt5 <- CreateSeuratObject(counts = znwt5.data, min.cells = 3, min.features = 200)
+znwt5$condition <- "znwt5"
+
+#ZNKO5
+znko5_dir <- 'D:/arg1zsgr hif1a htx single cell/Lavine_MGI4617_10x/MGI4617_KLAF-Vpenna-ZNKO5/outs/filtered_feature_bc_matrix'
+znko5.data <- Read10X(data.dir =znko5_dir)
+znko5 <- CreateSeuratObject(counts = znko5.data, min.cells = 3, min.features = 200)
+znko5$condition <- "znko5"
+
+#ZPWT5
+zpwt5_dir <- 'D:/arg1zsgr hif1a htx single cell/Lavine_MGI4617_10x/MGI4617_KLAF-Vpenna-ZPWT5/outs/filtered_feature_bc_matrix'
+zpwt5.data <- Read10X(data.dir =zpwt5_dir)
+zpwt5 <- CreateSeuratObject(counts = zpwt5.data, min.cells = 3, min.features = 200)
+zpwt5$condition <- "zpwt5"
+
+#ZPKO5
+zpko5_dir <- 'D:/arg1zsgr hif1a htx single cell/Lavine_MGI4617_10x/MGI4617_KLAF-Vpenna-ZPKO5/outs/filtered_feature_bc_matrix'
+zpko5.data <- Read10X(data.dir =zpko5_dir)
+zpko5 <- CreateSeuratObject(counts = zpko5.data, min.cells = 3, min.features = 200)
+zpko5$condition <- "zpko5"
+
+merged <- merge(znwt5, y = c(znko5, zpwt5, zpko5))
+```
+#QC
+```{r}
+png(filename="./pre qc violin plot.png", width=18, height=10, units="cm", res=300)
+merged[["propmt"]] <- PercentageFeatureSet(merged, pattern = "^mt-")
+VlnPlot(merged, features = c("nFeature_RNA", "nCount_RNA", "propmt"), ncol = 3, pt.size=0)
+dev.off()
+```
+
+```{r}
+merged
+```
+
+```{r}
+#added floor of 500 counts
+merged2 <- subset(merged, subset = nFeature_RNA > 500 & nFeature_RNA < 5000 & propmt < 10 & nCount_RNA < 20000 & nCount_RNA > 500)
+
+```
+
+```{r}
+merged2
+```
+
+```{r}
+png(filename="./qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged2, features = c("nFeature_RNA", "nCount_RNA", "propmt"), group.by = "orig.ident", ncol = 3, pt.size=0)
+dev.off()
+```
+
+```{r}
+DefaultAssay(merged2) <- 'RNA'
+merged2 <- SCTransform(merged2, vars.to.regress = c("propmt", "nCount_RNA"))
+merged2 <- RunPCA(merged2, npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(merged2, ndims = 50)
+```
+
+```{r}
+merged2 <- RunUMAP(merged2, reduction = "pca", dims = 1:40)
+merged2 <- FindNeighbors(merged2, reduction = "pca", dims = 1:40)
+merged2 <- FindClusters(merged2, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+saveRDS(merged2, "./merged2.rds")
+```
+
+```{r}
+FeaturePlot(merged2, features = "Arg1", reduction = "umap")
+FeaturePlot(merged2, features = "nCount_RNA", reduction = "umap")
+FeaturePlot(merged2, features = "propmt", reduction = "umap")
+FeaturePlot(merged2, features = "nFeature_RNA", reduction = "umap")
+FeaturePlot(merged2, features = "Cd163", reduction = "umap")
+FeaturePlot(merged2, features = "Cd68", reduction = "umap")
+FeaturePlot(merged2, features = "Tnnt2", reduction = "umap")
+```
+
+```{r}
+merged2$condition <- factor(merged2$condition, levels = c("znwt5", "zpwt5", "znko5", "zpko5"))
+```
+
+```{r}
+png(filename="./merged2 ncount rna split.png", width=60, height=20, units="cm", res=300)
+FeaturePlot(merged2, features = "nCount_RNA", reduction = "umap", split.by = "condition", pt.size = 2)& theme(legend.position = c(0.1,0.2))
+dev.off()
+```
+
+```{r}
+png(filename="./merged2 nfeature rna split.png", width=60, height=20, units="cm", res=300)
+FeaturePlot(merged2, features = "nFeature_RNA", reduction = "umap", split.by = "condition", pt.size = 2)& theme(legend.position = c(0.1,0.2))
+dev.off()
+```
+
+```{r}
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.1")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.2")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.3")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.4")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.6")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.7")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.8")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.9")
+```
+
+```{r}
+VlnPlot(merged2, features = "nCount_RNA", group.by = "SCT_snn_res.0.3", pt.size = 0)
+VlnPlot(merged2, features = "nFeature_RNA", group.by = "SCT_snn_res.0.3", pt.size = 0)
+VlnPlot(merged2, features = "propmt", group.by = "SCT_snn_res.0.3", pt.size = 0)
+```
+
+```{r}
+png(filename="./merged2 rna counts.png", width=40, height=20, units="cm", res=300)
+VlnPlot(merged2, features = "nCount_RNA", group.by = "SCT_snn_res.0.3", pt.size = 0)
+dev.off()
+
+png(filename="./merged2 mitochondrial counts.png", width=40, height=20, units="cm", res=300)
+VlnPlot(merged2, features = "propmt", group.by = "SCT_snn_res.0.3", pt.size = 0)
+dev.off()
+```
+
+```{r}
+DefaultAssay(merged2) <- 'SCT'
+Idents(merged2) <- "SCT_snn_res.0.3"
+rna.markers <- FindAllMarkers(merged2, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged2_DGE_GEX_res0.3.csv", quote = FALSE)
+```
+
+```{r}
+png(filename = "./merged2 dimplot.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(merged2, reduction = 'umap', group.by = 'SCT_snn_res.0.3', label.size = 7, label = TRUE, pt.size = 1)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))
+dev.off()
+```
+
+```{r}
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.3", split.by = "condition")
+```
+
+#Remove Non Myeloid
+```{r}
+Idents(merged2) <- "SCT_snn_res.0.3"
+
+#0 macrophage
+#1 low counts ***
+#2 low counts ***
+#3 macrophage
+#4 neutrophil ***
+#5 mhcii
+#6 proliferating
+#7 monocytes
+#8 endothelial ***
+#9 neutrophil ***
+#10 macrophage
+#11 resident
+#12 tcells ***
+#13 bcells ***
+
+
+
+merged3 <- subset(merged2, idents = c(0, 3, 5, 6, 7, 10, 11))
+```
+
+```{r}
+DefaultAssay(merged3) <- 'RNA'
+merged3 <- SCTransform(merged3, vars.to.regress = c("propmt", "nCount_RNA"))
+merged3 <- RunPCA(merged3, npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(merged3, ndims = 50)
+```
+
+```{r}
+merged3 <- RunUMAP(merged3, reduction = "pca", dims = 1:40)
+merged3 <- FindNeighbors(merged3, reduction = "pca", dims = 1:40)
+merged3 <- FindClusters(merged3, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+saveRDS(merged3, "./merged3.rds")
+```
+
+```{r}
+FeaturePlot(merged3, features = "Arg1", reduction = "umap")
+FeaturePlot(merged3, features = "nCount_RNA", reduction = "umap")
+FeaturePlot(merged3, features = "propmt", reduction = "umap")
+FeaturePlot(merged3, features = "nFeature_RNA", reduction = "umap")
+FeaturePlot(merged3, features = "Cd163", reduction = "umap")
+FeaturePlot(merged3, features = "Ccl8", reduction = "umap")
+FeaturePlot(merged3, features = "Gas6", reduction = "umap")
+FeaturePlot(merged3, features = "Ifitm1", reduction = "umap")
+FeaturePlot(merged3, features = "Cd68", reduction = "umap")
+FeaturePlot(merged3, features = "Trem2", reduction = "umap")
+FeaturePlot(merged3, features = "Plac8", reduction = "umap")
+FeaturePlot(merged3, features = "Tnnt2", reduction = "umap")
+```
+
+```{r}
+merged3$condition <- factor(merged3$condition, levels = c("znwt5", "zpwt5", "znko5", "zpko5"))
+```
+
+```{r}
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.1")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.2")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.3")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.4")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5", split.by = "condition")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.6")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.7")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.8")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.9")
+```
+
+```{r}
+VlnPlot(merged3, features = "nCount_RNA", group.by = "SCT_snn_res.0.5", pt.size = 0)
+VlnPlot(merged3, features = "nFeature_RNA", group.by = "SCT_snn_res.0.5", pt.size = 0)
+VlnPlot(merged3, features = "propmt", group.by = "SCT_snn_res.0.5", pt.size = 0)
+```
+
+```{r}
+png(filename="./merged3 rna counts.png", width=40, height=20, units="cm", res=300)
+VlnPlot(merged3, features = "nCount_RNA", group.by = "SCT_snn_res.0.5", pt.size = 0)
+dev.off()
+
+png(filename="./merged3 mitochondrial counts.png", width=40, height=20, units="cm", res=300)
+VlnPlot(merged3, features = "propmt", group.by = "SCT_snn_res.0.5", pt.size = 0)
+dev.off()
+```
+
+```{r}
+DefaultAssay(merged3) <- 'SCT'
+Idents(merged3) <- "SCT_snn_res.0.5"
+rna.markers <- FindAllMarkers(merged3, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged3_DGE_GEX_res0.5.csv", quote = FALSE)
+```
+
+```{r}
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5", split.by = "condition")
+```
+
+#Remove Non Myeloid
+```{r}
+Idents(merged3) <- "SCT_snn_res.0.5"
+
+#0 macrophage
+#1 macrophage
+#2 macrophage vcan intermediate
+#3 mhcii
+#4 proliferating
+#5 monocytes
+#6 junk ***
+#7 macrophage
+#8 arg1? olr1 intermediate
+#9 resident
+#10 junk ***
+#11 cardiomyocytes ***
+
+merged4 <- subset(merged3, idents = c('0', '1', '2', '3', '4', '5', '7', '8', '9'))
+```
+
+```{r}
+DefaultAssay(merged4) <- 'RNA'
+merged4 <- SCTransform(merged4, vars.to.regress = c("propmt", "nCount_RNA"))
+merged4 <- RunPCA(merged4, npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(merged4, ndims = 50)
+```
+
+```{r}
+merged4 <- RunUMAP(merged4, reduction = "pca", dims = 1:40)
+merged4 <- FindNeighbors(merged4, reduction = "pca", dims = 1:40)
+merged4 <- FindClusters(merged4, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = TRUE)
+
+saveRDS(merged4, "./merged4.rds")
+```
+
+```{r}
+FeaturePlot(merged4, features = "Arg1", reduction = "umap")
+FeaturePlot(merged4, features = "nCount_RNA", reduction = "umap")
+FeaturePlot(merged4, features = "propmt", reduction = "umap")
+FeaturePlot(merged4, features = "nFeature_RNA", reduction = "umap")
+FeaturePlot(merged4, features = "Cd163", reduction = "umap")
+FeaturePlot(merged4, features = "Ccl8", reduction = "umap")
+FeaturePlot(merged4, features = "Gas6", reduction = "umap")
+FeaturePlot(merged4, features = "Cxcl9", reduction = "umap")
+FeaturePlot(merged4, features = "Cd68", reduction = "umap")
+FeaturePlot(merged4, features = "Trem2", reduction = "umap")
+FeaturePlot(merged4, features = "Apoe", reduction = "umap")
+FeaturePlot(merged4, features = "Plac8", reduction = "umap")
+FeaturePlot(merged4, features = "Tnnt2", reduction = "umap")
+FeaturePlot(merged4, features = "Mmp9", reduction = "umap")
+FeaturePlot(merged4, features = "S100a9", reduction = "umap")
+```
+
+```{r}
+merged4$condition <- factor(merged4$condition, levels = c("znwt5", "zpwt5", "znko5", "zpko5"))
+```
+
+```{r}
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.1")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.2")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.3")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.4")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.6")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.7")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.8")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.9")
+```
+
+```{r}
+VlnPlot(merged4, features = "nCount_RNA", group.by = "SCT_snn_res.0.5", pt.size = 0)
+VlnPlot(merged4, features = "nFeature_RNA", group.by = "SCT_snn_res.0.5", pt.size = 0)
+VlnPlot(merged4, features = "propmt", group.by = "SCT_snn_res.0.5", pt.size = 0)
+```
+
+```{r}
+png(filename="./merged4 rna counts.png", width=40, height=20, units="cm", res=300)
+VlnPlot(merged4, features = "nCount_RNA", group.by = "SCT_snn_res.0.5", pt.size = 0)
+dev.off()
+
+png(filename="./merged4 mitochondrial counts.png", width=40, height=20, units="cm", res=300)
+VlnPlot(merged4, features = "propmt", group.by = "SCT_snn_res.0.5", pt.size = 0)
+dev.off()
+```
+
+```{r}
+DefaultAssay(merged4) <- 'SCT'
+Idents(merged4) <- "SCT_snn_res.0.5"
+rna.markers <- FindAllMarkers(merged4, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged4_DGE_GEX_res0.5.csv", quote = FALSE)
+```
+
+```{r}
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "SCT_snn_res.0.5", split.by = "condition")
+```
+
+```{r}
+png(filename="./arg1 violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged4, features = "Arg1", group.by = "condition", pt.size = 0)
+dev.off()
+```
+
+```{r}
+saveRDS(merged4, "./hif1a_htx_arg1zsgr_d5.rds")
+```
+
+```{r}
+myeloid <- readRDS("D:/arg1zsgr hif1a htx single cell/no harmony/hif1a_htx_arg1zsgr_d5.rds")
+```
+
+#marker list z scores
+```{r}
+#pop 0 mac1
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Mertk", "Mrc1", "Adgre1")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_0<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_0 <- rbind(z_scores_0,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_0<-z_scores_0[1,]
+
+DotPlot(myeloid, features = "z_0", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 1 mac2 
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Arg1", "Thbs1", "Il1b", "Cxcl3")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_1<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_1 <- rbind(z_scores_1,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_1<-z_scores_1[1,]
+
+DotPlot(myeloid, features = "z_1", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 2 mac3
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Cd74", "H2-Eb1", "H2-AA")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_2<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_2 <- rbind(z_scores_2,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_2<-z_scores_2[1,]
+
+DotPlot(myeloid, features = "z_2", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 3 mac4 Spp1 Trem2
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Spp1", "Trem2")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_3<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_3 <- rbind(z_scores_3,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_3<-z_scores_3[1,]
+
+DotPlot(myeloid, features = "z_3", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 4 mac5 proliferating
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Top2a", "Mki67", "Birc5")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_4<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_4 <- rbind(z_scores_4,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_4<-z_scores_4[1,]
+
+DotPlot(myeloid, features = "z_4", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 5 monocytes
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Plac8", "Chil3", "Ly6c2")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_5<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_5 <- rbind(z_scores_5,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_5<-z_scores_5[1,]
+
+DotPlot(myeloid, features = "z_5", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 6 mac6
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Fam20c", "Baiap2", "Dip2c", "Slc5a3")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_6<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_6 <- rbind(z_scores_6,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_6<-z_scores_6[1,]
+
+DotPlot(myeloid, features = "z_6", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 7 mac7
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Ctsk", "S100a4", "Nfatc1")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_7<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_7 <- rbind(z_scores_7,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_7<-z_scores_7[1,]
+
+DotPlot(myeloid, features = "z_7", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 8 mac8 arg1
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Arg1", "Saa3", "Marco", "Slc7a2", "Ltc4s")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_8<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_8 <- rbind(z_scores_8,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_8<-z_scores_8[1,]
+
+DotPlot(myeloid, features = "z_8", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+#pop 9 resident
+DefaultAssay(myeloid) <- "SCT"
+expdata <- GetAssayData(myeloid)
+zgenelist<-  c("Cd163", "Gas6", "Igf1", "Vsig4", "Ccl8")
+pops<-list(zgenelist)
+#Z-Scores
+z_scores_9<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores_9 <- rbind(z_scores_9,(av + colSums(geneExp) / length(zz)))
+}
+myeloid@meta.data$z_9<-z_scores_9[1,]
+
+DotPlot(myeloid, features = "z_9", group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+
+fun <- function(x) {
+  if (x == "0") {"mac1(Mertk/Mrc1/Adgre1)"} 
+  else if (x == "1") {"mac2(Arg1/Thbs1/Il1b/Cxcl3)"}
+  else if (x == "2") {"mac3(Cd74/H2-Eb1/H2-AA)"}
+  else if (x == "3") {"mac4(Spp1/Trem2)"}
+  else if (x == "4") {"mac5(Top2a/Mki67/Birc5)"}
+  else if (x == "5") {"monocytes(Plac8/Chil3/Ly6c2)"}
+  else if (x == "6") {"mac6(Fam20c/Baiap2/Dip2c/Slc5a3)"}
+  else if (x == "7") {"mac7(Ctsk/S100a4/Nfatc1)"}
+  else if (x == "8") {"mac8(Arg1/Saa3/Marco/Slc7a2/Ltc4s)"}
+  else if (x == "9") {"resident(Ccl8/Cd163/Gas6/Igf1/Vsig4)"}
+}
+myeloid$cell.type <- mapply(fun, myeloid$SCT_snn_res.0.5)
+```
+
+```{r}
+saveRDS(myeloid, "./new annotations hif1a_htx_arg1zsgr_d5.rds")
+```
+
+```{r}
+myeloid <- readRDS("E:/arg1zsgr hif1a htx single cell/no harmony/new annotations hif1a_htx_arg1zsgr_d5.rds")
+
+```
+
+```{r}
+png(filename = "./hif1 arg1zsgr d5 htx subcluster z dot plot.png", width = 25, height = 20, units = "cm", res = 300)
+DotPlot(object = myeloid, features = c("z_0", "z_1", "z_2", "z_3", "z_4", "z_6", "z_7", "z_8", "z_5", "z_9"), group.by = "cell.type")+
+  coord_fixed(ratio = 1)
+dev.off()
+```
+
+```{r}
+png(filename="./new annotations stacked barplot.png", width=40, height=20, units="cm", res=600)
+ggplot(myeloid@meta.data, aes(x = condition, fill = cell.type)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+# dimplot
+```{r}
+png(filename = "./new annotations.png", width = 40, height = 20, units = "cm", res = 600)
+DimPlot(myeloid, reduction = 'umap', group.by = 'cell.type', label.size = 7, label = FALSE, pt.size = 2)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+# dimplot split by condition
+```{r}
+png(filename = "./new annotations split.png", width = 90, height = 20, units = "cm", res = 600)
+DimPlot(myeloid, reduction = 'umap', group.by = 'cell.type',label.size = 7, label = FALSE, split.by = "condition", pt.size = 2)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+# dimplot no annotation
+```{r}
+png(filename = "./no annotations.png", width = 25, height = 20, units = "cm", res = 600)
+DimPlot(myeloid, reduction = 'umap', group.by = 'SCT_snn_res.0.5', label.size = 7, label = FALSE, pt.size = 2)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "znwt5") {"ZN"} 
+  else if (x == "zpwt5") {"ZP"}
+  else if (x == "znko5") {"ZN"}
+  else if (x == "zpko5") {"ZP"}
+}
+myeloid$zsgr <- mapply(fun, myeloid$condition)
+```
+
+```{r}
+DimPlot(myeloid, reduction = "umap", split.by = "zsgr", group.by = "cell.type")
+```
+
+```{r}
+saveRDS(myeloid, "./new annotations hif1a_htx_arg1zsgr_d5.rds")
+```
+
+```{r}
+myeloid <- readRDS("./new annotations hif1a_htx_arg1zsgr_d5.rds")
+```
+
+#export for scanpy
+```{r}
+myeloid$condition <- as.character(myeloid$condition)
+myeloid$zsgr <- as.character(myeloid$zsgr)
+slot(myeloid$SCT@SCTModel.list[[1]], 'median_umi') = median(myeloid$SCT@SCTModel.list[[1]]@cell.attributes$umi)
+```
+
+```{r}
+SaveH5Seurat(myeloid, filename = "./scanpy/myeloid.h5Seurat")
+```
+
+```{r}
+Convert("./scanpy/myeloid.h5Seurat", dest = "h5ad")
+```
+
+#new arg1 pop go terms
+```{r}
+DefaultAssay(myeloid) <- 'SCT'
+myeloid <- SetIdent(myeloid, value = myeloid@meta.data$cell.type)
+rna.markers <- FindAllMarkers(myeloid, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.1)
+write.csv(rna.markers, file ="./SCT_snn_res.0.5", quote = FALSE)
+
+rna.markers <- subset(rna.markers, rna.markers$p_val_adj < 0.05)
+rna.markers <- subset(rna.markers, rna.markers$avg_log2FC > 0.1)
+write.csv(rna.markers, file ="./SCT_snn_res.0.5.csv", quote = FALSE)
+```
+
+```{r}
+#input marker list for population 8 ; mac8(Arg1/Saa3/Marco/Slc7a2/Ltc4s) to enrichr website
+#download enrichr website table as txt
+p5 <- read.delim2("WikiPathways_2019_Mouse_table.txt")
+
+p5['condition']='p5'
+p5['Adjusted.P.value'] <-as.numeric(p5$Adjusted.P.value)
+p5['Combined.Score'] <-as.numeric(p5$Combined.Score)
+
+p5 <- subset(p5, p5$Adjusted.P.value < 0.05)
+
+p5 <- arrange(p5,desc(Combined.Score))
+
+p5<-head(p5, 10)
+
+p5['Overlap']<-sapply(p5$Overlap, function(x) eval(parse(text=x)))
+p5['Adjusted.P.value'] <-as.numeric(p5$Adjusted.P.value)
+
+terms <- p5$Term
+
+p5['terms']=terms
+
+
+png(filename="./wikipathways arg1 pop8 mouse.png", width=15, height=15, units="cm", res=600)
+ggplot(p5)+ geom_point(aes(x=Combined.Score,y=terms,color=Adjusted.P.value, size=Overlap))+
+  scale_color_gradientn(colors=c("red","lightgrey", "blue"), oob=scales::squish)  + 
+  scale_y_discrete(limits = rev(p5$terms), labels = function(y) str_wrap(y, width = 35))+
+  theme_bw()+
+  theme(aspect.ratio = 2)
+dev.off()
+```
+
+```{r}
+png(filename="./arg1 expression.png", width=20, height=20, units="cm", res=600)
+FeaturePlot(myeloid, features = "Arg1", pt.size = 3, reduction = "umap")  +
+  theme(legend.text=element_text(size=25))+
+  theme(legend.position ='right')+
+  coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+```
+
+```{r}
+png(filename="./arg1 violin plot grouped by zsgr.png", width=10, height=10, units="cm", res=300)
+VlnPlot(myeloid, features = "Arg1", group.by = "zsgr")
+dev.off()
+```
+
+```{r}
+png(filename="./new annotations stacked barplot split by zsgr.png", width=40, height=20, units="cm", res=600)
+ggplot(myeloid@meta.data, aes(x = zsgr, fill = cell.type)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+# zsgr+ only
+```{r}
+Idents(myeloid) <- "condition"
+
+zsgr_only <- subset(myeloid, idents = c("zpwt5", "zpko5"))
+```
+
+#Stacked barplot zsgr+ only
+```{r}
+png(filename="./new annotations stacked barplot split by zsgr_only.png", width=40, height=20, units="cm", res=600)
+ggplot(zsgr_only@meta.data, aes(x = condition, fill = cell.type)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+```{r}
+#eicosanoid synthesis
+#PNPLA8;ALOX5;TBXAS1;LTC4S;PTGES
+
+#Eicosanoid metabolism via Lipo Oxygenases (LOX) 
+#CYSLTR1;ACOX1;ALOX5;DPEP2;FPR2;ACOX3;LTC4S
+```
+
+```{r}
+DefaultAssay(myeloid) <- 'SCT'
+FeaturePlot(myeloid, features = "Alox5", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Acox1", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Acox3", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Dpep2", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Fpr2", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Ltc4s", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Cysltr1", pt.size = 3, split.by = "condition", reduction = "umap")
+```
+
+```{r}
+#Chemokine signaling pathway
+#VAV3;CCL25;STAT5B;CCL24;GNAI3;PIK3R3;GNG12;CXCL14;PTK2;PIK3R5;TIAM2;FGR;TIAM1;ADCY9;GRK5;PIK3CA;CCL6;AKT3;CCR5;DOCK2;PLCB1;SOS2
+```
+
+```{r}
+DefaultAssay(myeloid) <- 'SCT'
+FeaturePlot(myeloid, features = "Vav3", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Ccl25", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Stat5b", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Ccl24", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Gnai3", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Pik3r3", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Gng12", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Cxcl14", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Ptk2", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Pik3r5", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Tiam2", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Fgr", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Tiam1", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Adcy9", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Grk5", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Pik3ca", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Ccl6", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Akt3", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Ccr5", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Dock2", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Plcb1", pt.size = 3, split.by = "condition", reduction = "umap")
+FeaturePlot(myeloid, features = "Sos2", pt.size = 3, split.by = "condition", reduction = "umap")
+```
+
+```{r}
+png(filename="./Ltc4s expression.png", width=20, height=20, units="cm", res=600)
+FeaturePlot(myeloid, features = "Ltc4s", pt.size = 3, reduction = "umap")  +
+  theme(legend.text=element_text(size=25))+
+  theme(legend.position ='right')+
+  coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+```
+
+```{r}
+png(filename="./Ccl24 expression.png", width=20, height=20, units="cm", res=600)
+FeaturePlot(myeloid, features = "Ccl24", pt.size = 3, reduction = "umap")  +
+  theme(legend.text=element_text(size=25))+
+  theme(legend.position ='right')+
+  coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+```

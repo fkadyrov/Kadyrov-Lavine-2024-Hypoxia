@@ -1,0 +1,525 @@
+```{r}
+library(Seurat)
+library(ggplot2)
+library(gprofiler2)
+library(stringr)
+library(svglite)
+```
+
+```{r}
+setwd("E:/arg1zsgr hif1a htx single cell/no harmony/palantir/")
+```
+
+```{r}
+myeloid <- readRDS("D:/arg1zsgr hif1a htx single cell/no harmony/new annotations hif1a_htx_arg1zsgr_d5.rds")
+
+Idents(myeloid) <- "predicted.celltype"
+ccmyeloid <- myeloid
+
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+```
+
+```{r}
+mm.s.genes = gorth(cc.genes.updated.2019$s.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
+mm.g2m.genes = gorth(cc.genes.updated.2019$g2m.genes, source_organism = "hsapiens", target_organism = "mmusculus")$ortholog_name
+
+#assign cell cycle scores
+ccmyeloid <- CellCycleScoring(object = ccmyeloid,
+                              s.features = mm.s.genes, g2m.features = mm.g2m.genes, set.ident = TRUE)
+
+head(ccmyeloid[[]])
+
+ccmyeloid <- RunPCA(ccmyeloid, features = c(mm.s.genes, mm.g2m.genes))
+DimPlot(ccmyeloid, reduction = "pca")
+
+png(filename="./pre cell cycle regression pca.png", width=40, height=20, units="cm", res=600)
+DimPlot(ccmyeloid, reduction = "pca", pt.size = 5)+
+  scale_color_manual(values = c( '#0C7BDC', '#AA4499', 'orange2'))+
+  coord_fixed(ratio = 1.3)
+dev.off()
+```
+
+```{r}
+cc.myeloid <- ScaleData(ccmyeloid, vars.to.regress = c("S.Score", "G2M.Score"), 
+                        features = rownames(ccmyeloid))
+
+cc.myeloid <- RunPCA(cc.myeloid, features = VariableFeatures(cc.myeloid), nfeatures.print = 10)
+
+cc.myeloid <- RunPCA(cc.myeloid, features = c(mm.s.genes, mm.g2m.genes))
+DimPlot(cc.myeloid, reduction = "pca")
+
+png(filename="./post cell cycle regression pca.png", width=40, height=20, units="cm", res=600)
+DimPlot(cc.myeloid, reduction = "pca", pt.size = 5)+
+  scale_color_manual(values = c( '#0C7BDC', '#AA4499', 'orange2'))+
+  coord_fixed(ratio = 0.9)
+dev.off()
+```
+
+```{r}
+
+# Save the scaled matrix
+write.csv(as.matrix(cc.myeloid[["SCT"]]@scale.data), 
+          file = "./myeloid_SCT_normalized.txt", quote = FALSE)
+
+# Save the meta data
+write.csv(cc.myeloid@meta.data, file = "./myeloid_meta.csv", quote = TRUE)
+
+#input to palantir
+```
+
+
+```{r}
+#selecting monocyte based on monocyte z score
+
+DefaultAssay(cc.myeloid) <- "SCT"
+expdata <- GetAssayData(cc.myeloid)
+zMono <- c("Plac8", "Ly6c2")
+pops<-list(zMono)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+  genes <- pops[[i]]
+  zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+  av <- numeric(ncol(expdata))
+  
+  geneExp <- as.matrix(expdata[zz, ])
+  geneExp <- t(scale(t(geneExp)))
+  geneExp[is.nan(geneExp)] <- 0
+  z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+cc.myeloid@meta.data$Mono_z<-z_scores[1,]
+
+Idents(cc.myeloid) <- "cell.type"
+myeloidmono <- subset(cc.myeloid, idents = "monocytes(Plac8/Chil3/Ly6c2)")
+
+mono_z<- FetchData(myeloidmono, vars = "Mono_z") 
+```
+
+
+```{r}
+#start cell
+png(filename="./palantir starting cell.png", width=20, height=20, units="cm", res=300)
+DimPlot(myeloid, reduction = "umap", pt.size = 3, label = FALSE,
+        cells.highlight = "ACACCAAGTAGTATAG-1_1", cols.highlight = "red", cols = "gray", sizes.highlight = 3, order = TRUE)+
+  coord_fixed()
+dev.off()
+```
+
+```{r}
+#mac4 was determined as the terminal population
+#'TCGACCTCAGTGTACT-1_3', 'TGATGCAGTATAATGG-1_3'
+
+startcells <- "ACACCAAGTAGTATAG-1_1"
+terminalcells <- c('TCGACCTCAGTGTACT-1_3', 'TGATGCAGTATAATGG-1_3')
+
+png(filename="./palantir starting cell terminal cells.png", width=20, height=20, units="cm", res=300)
+DimPlot(myeloid, reduction = "umap", pt.size = 3, label = FALSE,
+        cells.highlight = list(startcells, terminalcells), cols.highlight = c("red", "blue"), cols = "gray", sizes.highlight = 3, order = TRUE)+
+  coord_fixed()
+dev.off()
+
+```
+
+```{r}
+#palantir results to umap
+
+myeloid_meta <- read.csv2('./palantir_meta_data.csv', header=TRUE, sep=',', row.names = 1)
+
+Myeloid_2 <- AddMetaData(myeloid, myeloid_meta)
+
+Myeloid_2@meta.data$pseudotime <- as.numeric(as.character(Myeloid_2@meta.data$pseudotime))
+Myeloid_2@meta.data$entropy <- as.numeric(as.character(Myeloid_2@meta.data$entropy))
+Myeloid_2@meta.data$TCGACCTCAGTGTACT.1_3 <- as.numeric(as.character(Myeloid_2@meta.data$TCGACCTCAGTGTACT.1_3))
+Myeloid_2@meta.data$TGATGCAGTATAATGG.1_3 <- as.numeric(as.character(Myeloid_2@meta.data$TGATGCAGTATAATGG.1_3))
+
+myeloid_meta <- data.frame(myeloid_meta)
+myeloid_meta
+
+myeloid_meta$pseudotime <- as.numeric(myeloid_meta$pseudotime)
+myeloid_meta$entropy <- as.numeric(myeloid_meta$entropy)
+myeloid_meta$ClusterName <- as.character(myeloid_meta$ClusterName)
+myeloid_meta$TCGACCTCAGTGTACT.1_3 <- as.numeric(myeloid_meta$TCGACCTCAGTGTACT.1_3)
+myeloid_meta$TGATGCAGTATAATGG.1_3 <- as.numeric(myeloid_meta$TGATGCAGTATAATGG.1_3)
+```
+
+```{r}
+waterfall = function(cluster, blindcolor, clustertitle) {
+
+g <- ggplot(myeloid_meta, aes(x=pseudotime, y=entropy)) +
+  ylim(0,1)+
+  geom_point(size=2, color = "azure2") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = subset(myeloid_meta, ClusterName == cluster), alpha = .5,
+             aes(x=pseudotime, y=entropy, colour = ClusterName),
+             color = blindcolor,
+             size=2)+
+  coord_fixed() +theme(legend.position = "right")
+
+ggsave(filename = str_c(clustertitle, "_palantir.png"), device = "png", plot = g)
+}
+```
+
+```{r}
+
+waterfall("mac1(Mertk/Mrc1/Adgre1)", '#920000', "mac1")
+waterfall("mac2(Arg1/Thbs1/Il1b/Cxcl3)", '#004949', "mac2")
+waterfall("mac3(Cd74/H2-Eb1/H2-AA)", '#009292', "mac3")
+waterfall("mac4(Trem2/Spp1)", '#ff6db6', "mac4")
+waterfall("mac5(Top2a/Mki67/Birc5)", '#490092', "mac5")
+waterfall("mac6(Fam20c/Baiap2/Dip2c/Slc5a3)", '#006ddb', "mac6")
+waterfall("mac7(Ctsk/S100a4/Nfatc1)", '#24ff24', "mac7")
+waterfall("mac8(Arg1/Saa3/Marco/Slc7a2/Ltc4s)", '#db6d00', "mac8")
+waterfall("monocytes(Plac8/Chil3/Ly6c2)", '#b66dff', "monocytes")
+waterfall("resident(Ccl8/Cd163/Gas6/Igf1/Vsig4)", '#6db6ff', "resident")
+```
+
+#FDL plots
+```{r}
+fdl <- read.csv2('./fdl.csv', header=TRUE, sep=',', row.names = 1)
+myeloid_fdl <- transform(merge(fdl,myeloid_meta,by=0,all=TRUE), row.names=Row.names, Row.names=NULL)
+myeloid_fdl$x <- as.numeric(myeloid_fdl$x)
+myeloid_fdl$y <- as.numeric(myeloid_fdl$y)
+myeloid_fdl$pseudotime <- as.numeric(myeloid_fdl$pseudotime)
+myeloid_fdl$entropy <- as.numeric(myeloid_fdl$entropy)
+myeloid_fdl$TCGACCTCAGTGTACT.1_3 <- as.numeric(myeloid_fdl$TCGACCTCAGTGTACT.1_3)
+myeloid_fdl$TGATGCAGTATAATGG.1_3 <- as.numeric(myeloid_fdl$TGATGCAGTATAATGG.1_3)
+```
+
+#entropy pseudotime FDL plots
+```{r}
+png(filename="./fdl entropy ggplot2.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = entropy)) +
+  geom_point(size = 2, alpha = 1)+
+  scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))+
+  theme_bw()+
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_fixed(ratio=0.9)
+dev.off()
+
+png(filename="./fdl pseudotime ggplot2.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = pseudotime)) +
+  geom_point(size = 2, alpha = 1)+
+  scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))+
+  theme_bw()+
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  coord_fixed(ratio=0.9)
+dev.off()
+```
+
+#individual populations plotted on FDL
+```{r}
+fdlcelltype = function(cluster, blindcolor, clustertitle) {
+  highlight_cluster <- subset(myeloid_fdl, ClusterName == cluster)
+  
+
+g <- ggplot(myeloid_fdl, aes(x = x, y = y, color = ClusterName)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_cluster,
+             aes(x=x, y=y, colour = ClusterName),
+             color = blindcolor,
+             size=2, alpha = 1)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+
+ggsave(filename = str_c(clustertitle, "_fdl.png"), device = "png", plot = g)
+  }
+
+```
+
+```{r}
+
+fdlcelltype("mac1(Mertk/Mrc1/Adgre1)", '#920000', "mac1")
+fdlcelltype("mac2(Arg1/Thbs1/Il1b/Cxcl3)", '#004949', "mac2")
+fdlcelltype("mac3(Cd74/H2-Eb1/H2-AA)", '#009292', "mac3")
+fdlcelltype("mac4(Spp1/Trem2)", '#ff6db6', "mac4")
+fdlcelltype("mac5(Top2a/Mki67/Birc5)", '#490092', "mac5")
+fdlcelltype("mac6(Fam20c/Baiap2/Dip2c/Slc5a3)", '#006ddb', "mac6")
+fdlcelltype("mac7(Ctsk/S100a4/Nfatc1)", '#24ff24', "mac7")
+fdlcelltype("mac8(Arg1/Saa3/Marco/Slc7a2/Ltc4s)", '#db6d00', "mac8")
+fdlcelltype("monocytes(Plac8/Chil3/Ly6c2)", '#b66dff', "monocytes")
+fdlcelltype("resident(Ccl8/Cd163/Gas6/Igf1/Vsig4)", '#6db6ff', "resident")
+```
+
+```{r}
+#combined
+
+png(filename = "./fdl cell type ggplot2.png", width = 20, height = 20, units = "cm", res = 300)
+ggplot(myeloid_fdl,
+       aes(x = x , y = y, color = ClusterName))+
+  geom_point(size = 2, alpha = 1)+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff"))+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+dev.off()
+```
+
+
+#plotting conditions
+```{r}
+#znko5
+highlight_znko5 <- subset(myeloid_fdl, Group == "znko5")
+
+png(filename="./fdl znko5 ggplot2.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = Group)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_znko5,
+             aes(x=x, y=y, colour = Group),
+             color = '#332288',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+
+#znwt5
+highlight_znwt5 <- subset(myeloid_fdl, Group == "znwt5")
+
+png(filename="./fdl znwt5 ggplot2.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = Group)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_znwt5,
+             aes(x=x, y=y, colour = Group),
+             color = '#882255',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+
+#zpko5
+highlight_zpko5 <- subset(myeloid_fdl, Group == "zpko5")
+
+png(filename="./fdl zpko5 ggplot2.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = Group)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_zpko5,
+             aes(x=x, y=y, colour = Group),
+             color = '#44AA99',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+
+#zpwt5
+highlight_zpwt5 <- subset(myeloid_fdl, Group == "zpwt5")
+
+png(filename="./fdl zpwt5 ggplot2.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = Group)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_zpwt5,
+             aes(x=x, y=y, colour = Group),
+             color = '#88CCEE',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+```
+
+#split between WT and KO on FDL
+```{r}
+fun <- function(x) {
+  if (x == "znko5") {"KO"}
+  else if (x == "zpko5") {"KO"}
+  else if (x == "znwt5") {"WT"}
+  else if (x == "zpwt5") {"WT"}
+}
+
+myeloid_fdl$genotype <- mapply(fun, myeloid_fdl$Group)
+```
+
+#split between zsgr neg and pos on FDL
+```{r}
+fun <- function(x) {
+  if (x == "znko5") {"neg"}
+  else if (x == "zpko5") {"zsgr"}
+  else if (x == "znwt5") {"neg"}
+  else if (x == "zpwt5") {"zsgr"}
+}
+
+myeloid_fdl$zsgr <- mapply(fun, myeloid_fdl$Group)
+```
+
+
+#zsgr negative
+```{r}
+highlight_neg <- subset(myeloid_fdl, zsgr == "neg")
+
+png(filename="./palantir zsgr negative.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = ClusterName)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_neg,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#FFC20A',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+
+```
+
+#zsgr positive
+```{r}
+highlight_zsgr <- subset(myeloid_fdl, zsgr == "zsgr")
+
+png(filename="./palantir zsgr positive.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = ClusterName)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_zsgr,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#0C7BDC',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+
+```
+
+#Arg1 Lineage FDL
+```{r}
+highlight_mac1 <- subset(myeloid_fdl, ClusterName == "mac1(Mertk/Mrc1/Adgre1)")
+highlight_mac4 <- subset(myeloid_fdl, ClusterName == "mac4(Spp1/Trem2)")
+highlight_mac5 <- subset(myeloid_fdl, ClusterName == "mac5(Top2a/Mki67/Birc5)")
+highlight_mac6 <- subset(myeloid_fdl, ClusterName == "mac6(Fam20c/Baiap2/Dip2c/Slc5a3)")
+highlight_mac8 <- subset(myeloid_fdl, ClusterName == "mac8(Arg1/Saa3/Marco/Slc7a2/Ltc4s)")
+highlight_res <- subset(myeloid_fdl, ClusterName == "resident(Ccl8/Cd163/Gas6/Igf1/Vsig4)")
+
+png(filename="./fdl arg1 lineage.png", width=20, height=20, units="cm", res=600)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = ClusterName)) +
+  geom_point(size = 3, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_mac1,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#920000',
+             size=4)+
+  geom_point(data = highlight_mac4,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#ff6db6',
+             size=4)+
+  geom_point(data = highlight_mac5,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#490092',
+             size=4)+
+  geom_point(data = highlight_mac6,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#006ddb',
+             size=4)+
+  geom_point(data = highlight_mac8,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#db6d00',
+             size=4)+
+  geom_point(data = highlight_res,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#6db6ff',
+             size=4)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+```
+
+#zsgr positive wt vs ko
+```{r}
+highlight_zpko <- subset(myeloid_fdl, Group == "zpko5")
+highlight_zpwt <- subset(myeloid_fdl, Group == "zpwt5")
+highlight_znko <- subset(myeloid_fdl, Group == "znko5")
+highlight_znwt <- subset(myeloid_fdl, Group == "znwt5")
+
+png(filename="./palantir zsgr positive control.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = Group)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_zpwt,
+             aes(x=x, y=y, colour = ClusterName),
+             color = 'blue',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+
+png(filename="./palantir zsgr positive ko.png", width=20, height=20, units="cm", res=300)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = Group)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_zpko,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#DC3220',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+
+```
+
+#plotting mac4 and mac8 highlighting ZPWT and ZPKO
+```{r}
+highlight_mac8 <- subset(myeloid_fdl, ClusterName == "mac8(Arg1/Saa3/Marco/Slc7a2/Ltc4s)")
+highlight_mac8_zpwt <- subset(highlight_mac8, Group == "zpwt5")
+highlight_mac8_zpko <- subset(highlight_mac8, Group == "zpko5")
+
+highlight_mac4 <- subset(myeloid_fdl, ClusterName == "mac4(Spp1/Trem2)")
+highlight_mac4_zpwt <- subset(highlight_mac4, Group == "zpwt5")
+highlight_mac4_zpko <- subset(highlight_mac4, Group == "zpko5")
+```
+
+```{r}
+png(filename="./fdl mac4 zpwt.png", width=20, height=20, units="cm", res=600)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = ClusterName)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_mac4_zpwt,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#ff6db6',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+  
+png(filename="./fdl mac4 zpko.png", width=20, height=20, units="cm", res=600)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = ClusterName)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_mac4_zpko,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#ff6db6',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+```
+
+```{r}
+png(filename="./fdl mac8 zpwt.png", width=20, height=20, units="cm", res=600)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = ClusterName)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_mac8_zpwt,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#db6d00',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+  
+png(filename="./fdl mac8 zpko.png", width=20, height=20, units="cm", res=600)
+ggplot(myeloid_fdl, aes(x = x, y = y, color = ClusterName)) +
+  geom_point(size = 2, alpha = 1, color ="azure2")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+  geom_point(data = highlight_mac8_zpko,
+             aes(x=x, y=y, colour = ClusterName),
+             color = '#db6d00',
+             size=2)+
+  coord_fixed(ratio = 0.9) +theme(legend.position = "right")
+dev.off()
+```
+
