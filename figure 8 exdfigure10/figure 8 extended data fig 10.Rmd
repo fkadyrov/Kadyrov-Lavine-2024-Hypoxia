@@ -1,0 +1,875 @@
+#041523 
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+```
+
+```{r}
+setwd("E:/arg1 dtr scseq")
+
+#ARG1
+wt_dir <- 'E:/arg1 dtr scseq/atdt/outs/filtered_feature_bc_matrix'
+wt.data <- Read10X(data.dir =wt_dir)
+WT <- CreateSeuratObject(counts = wt.data, min.cells = 3, min.features = 200)
+WT$condition <- "WT"
+
+#ARG1 DTR
+dtr_dir <- 'E:/arg1 dtr scseq/adtr/outs/filtered_feature_bc_matrix'
+dtr.data <- Read10X(data.dir =dtr_dir)
+DTR <- CreateSeuratObject(counts = dtr.data, min.cells = 3, min.features = 200)
+DTR$condition <- "DTR"
+
+merged <- merge(WT, y = c(DTR))
+```
+#QC
+```{r}
+merged[["propmt"]] <- PercentageFeatureSet(merged, pattern = "^mt-")
+```
+
+```{r}
+png(filename="./pre qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged, features = c("nFeature_RNA", "nCount_RNA", "propmt"), ncol = 3, pt.size=0)
+dev.off()
+```
+
+```{r}
+merged
+```
+
+```{r}
+#added floor of 500 counts
+merged2 <- subset(merged, subset = nFeature_RNA > 500 & nFeature_RNA < 5000 & propmt < 10 & nCount_RNA < 20000 & nCount_RNA > 500)
+
+```
+
+```{r}
+merged2
+```
+
+```{r}
+png(filename="./qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged2, features = c("nFeature_RNA", "nCount_RNA", "propmt"), group.by = "orig.ident", ncol = 3, pt.size=0)
+dev.off()
+```
+
+#SCT transform and filter
+```{r}
+DefaultAssay(merged2) <- 'RNA'
+merged2 <- SCTransform(merged2, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+merged2 <- RunPCA(merged2, features = VariableFeatures(object = merged2), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(merged2, ndims = 50)
+```
+
+```{r}
+merged2 <- RunUMAP(merged2, reduction = "pca", dims = 1:40)
+merged2 <- FindNeighbors(merged2, reduction = "pca", dims = 1:40)
+merged2 <- FindClusters(merged2, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(merged2, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(merged2, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(merged2, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(merged2, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(merged2, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(merged2, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(merged2, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(merged2, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(merged2, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+DimPlot(merged2, group.by = "SCT_snn_res.0.3", label = TRUE, split.by = "condition")
+```
+
+```{r}
+png(filename="./merged2 03 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(merged2, group.by = "SCT_snn_res.0.3", label = TRUE)
+dev.off()
+
+saveRDS(merged2, "./merged2.rds")
+merged2 <- readRDS("./merged2.rds")
+```
+
+```{r}
+DefaultAssay(merged2) <- 'SCT'
+Idents(merged2) <- "SCT_snn_res.0.3"
+rna.markers <- FindAllMarkers(merged2, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged2_DGE_GEX_res0.3.csv", quote = FALSE)
+```
+
+
+
+#Remove Non Myeloid
+```{r}
+#0 mac
+#1 mac
+#2 mono
+#3 prolif
+#4 endo
+#5 mac
+#6 bcells
+#7 neutrophils
+#8 mac
+#9 junk
+
+merged3 <- subset(merged2, idents = c('0', '1', '2', '3', '5', '8'))
+```
+
+```{r}
+DefaultAssay(merged3) <- 'RNA'
+merged3 <- SCTransform(merged3, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+merged3 <- RunPCA(merged3, features = VariableFeatures(object = merged3), npcs=100, verbose=TRUE)
+```
+
+
+```{r}
+ElbowPlot(merged3, ndims = 50)
+```
+
+```{r}
+merged3 <- RunUMAP(merged3, reduction = "pca", dims = 1:40)
+merged3 <- FindNeighbors(merged3, reduction = "pca", dims = 1:40)
+merged3 <- FindClusters(merged3, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.1")
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.2")
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.3")
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.4")
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.5")
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.6")
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.7")
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.8")
+DimPlot(merged3, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.9")
+
+```
+
+
+```{r}
+DefaultAssay(merged3) <- 'SCT'
+Idents(merged3) <- "SCT_snn_res.0.9"
+rna.markers <- FindAllMarkers(merged3, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged3_DGE_GEX_res0.9.csv", quote = FALSE)
+```
+
+```{r}
+png(filename="./merged3 09 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(merged3, group.by = "SCT_snn_res.0.9", label = TRUE)
+dev.off()
+
+saveRDS(merged3, "./merged3.rds")
+merged3 <- readRDS("./merged3.rds")
+```
+
+
+#Remove Non Myeloid
+```{r}
+DefaultAssay(merged3) <- 'SCT'
+Idents(merged3) <- "SCT_snn_res.0.9"
+
+#0 mac
+#1 mac
+#2 mac
+#3 mono
+#4 mac
+#5 mac
+#6 mac
+#7 mitochondrial genes
+#8 mac
+#9 mac
+#10 prolif
+#11 mac
+#12 mitochondrial genes
+
+merged4 <- subset(merged3, idents = c('0', '1', '2', '3', '4', '5', '6', '8', '9', '10', '11'))
+```
+
+```{r}
+DefaultAssay(merged4) <- 'RNA'
+merged4 <- SCTransform(merged4, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+merged4 <- RunPCA(merged4, features = VariableFeatures(object = merged4), npcs=100, verbose=TRUE)
+```
+
+
+```{r}
+ElbowPlot(merged4, ndims = 50)
+```
+
+```{r}
+merged4 <- RunUMAP(merged4, reduction = "pca", dims = 1:40)
+merged4 <- FindNeighbors(merged4, reduction = "pca", dims = 1:40)
+merged4 <- FindClusters(merged4, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.1")
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.2")
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.3")
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.4")
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.5")
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.6")
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.7")
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.8")
+DimPlot(merged4, reduction = "umap", label = TRUE, group.by = "SCT_snn_res.0.9")
+
+```
+
+```{r}
+DefaultAssay(merged4) <- 'SCT'
+Idents(merged4) <- "SCT_snn_res.0.7"
+rna.markers <- FindAllMarkers(merged4, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged4_DGE_GEX_res0.7.csv", quote = FALSE)
+```
+
+```{r}
+png(filename="./merged4 07 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(merged4, group.by = "SCT_snn_res.0.7", label = TRUE)
+dev.off()
+
+saveRDS(merged4, "./merged4.rds")
+merged4 <- readRDS("./merged4.rds")
+```
+
+# Annotate
+```{r}
+#0: Trem2
+#1: Slc7a11
+#2: Mertk
+#3: Mono
+#4: Trem2_Spp1
+#5: Mac5
+#6: IFN
+#7: Res
+#8: Mac8
+#9: Prolif
+#10: MHCII
+
+fun <- function(x) {
+  if (x == "0") {"Trem2"} 
+  else if (x == "1") {"Slc7a11"}
+  else if (x == "2") {"Mertk"}
+  else if (x == "3") {"Mono"}
+  else if (x == "4") {"Trem2_Spp1"}
+  else if (x == "5") {"Mac5"}
+  else if (x == "6") {"IFN"}
+  else if (x == "7") {"Res"}
+  else if (x == "8") {"Mac8"}
+  else if (x == "9") {"Prolif"}
+  else if (x == "10") {"MHCII"}
+}
+
+merged4$sub.type <- mapply(fun, merged4$SCT_snn_res.0.7)
+
+```
+
+
+```{r}
+myeloid <- merged4
+
+saveRDS(myeloid, "./unmapped annotated.rds")
+myeloid <- readRDS("./unmapped annotated.rds")
+```
+
+```{r}
+myeloid$condition <- factor(x = myeloid$condition, levels = c("WT", "DTR"))
+```
+
+#mapping
+
+# Reference Mapping
+```{r}
+andrew_mouse <- readRDS("D:/andrew reclustered no ccrl2 121422/MonoTrack_Jan2023_UMAPmodel.rds")
+DimPlot(andrew_mouse, reduction = "umap", label = TRUE)
+```
+
+```{r}
+andrew_mouse <- FindNeighbors(andrew_mouse, reduction = "pca", dims = 1:40)
+DimPlot(andrew_mouse, reduction = "umap", label = TRUE)
+```
+
+```{r}
+andrew_mouse <- RunSPCA(andrew_mouse, assay = 'SCT', graph = 'SCT_snn')
+DimPlot(andrew_mouse, reduction = "umap", label = TRUE)
+```
+
+```{r}
+anchors <- FindTransferAnchors(
+  reference = andrew_mouse,
+  query = myeloid,
+  normalization.method = "SCT",
+  reference.reduction = "spca",
+  reference.assay = "SCT",
+  dims = 1:40
+)
+```
+
+```{r}
+mapped <- MapQuery(
+  anchorset = anchors,
+  query = myeloid,
+  reference = andrew_mouse,
+  refdata = list(
+    celltype = "Names"
+  ),
+  reference.reduction = "spca",
+  reduction.model = "umap"
+)
+```
+
+```{r}
+DimPlot(mapped, reduction = "ref.umap", group.by = "predicted.celltype")
+```
+
+```{r}
+#mapped object
+saveRDS(mapped, "./mapped.rds")
+mapped <- readRDS("./mapped.rds")
+DimPlot(mapped, reduction = "ref.umap", group.by = "predicted.celltype")
+```
+
+#plot of mapped data
+```{r}
+mapped$predicted.celltype <- factor(x = mapped$predicted.celltype, levels = c("Trem2", "Gdf15", "MHCII", "IFN", "Prolif", "Arg1", "cDC2", "Mono", "Ccl8", "Res"))
+
+png(filename="./mapped data.png", width=25, height=20, units="cm", res=600)
+DimPlot(mapped, reduction = "ref.umap", label = FALSE, group.by = "predicted.celltype", pt.size = 2) + coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+
+mapped$condition <- factor(x = mapped$condition, levels = c("WT", "DTR"))
+
+png(filename="./mapped data split.png", width=40, height=20, units="cm", res=600)
+DimPlot(mapped, reduction = "ref.umap", label = FALSE, group.by = "predicted.celltype", pt.size = 2, split.by = "condition") + coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+#stacked barplot of cell 
+```{r}
+png(filename="./mapped stacked barplot.png", width=40, height=20, units="cm", res=600)
+ggplot(mapped@meta.data, aes(x = condition, fill = predicted.celltype)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+```{r}
+Idents(mapped) <- "predicted.celltype"
+mapped.averageexpression <- AverageExpression(mapped, features = c("Ccl8","MHCII","Trem2","Gdf15","Res","Arg1","Prolif","Mono","IFN","cDC2"),
+                                               assays = "prediction.score.celltype")
+mapped.averageexpression <- as.matrix(mapped.averageexpression)
+mapping_scores <- mapped.averageexpression[[1]]
+list <- c("Ccl8","MHCII","Trem2","Gdf15","Res","Arg1","Prolif","Mono","IFN","cDC2")
+
+png(filename="./mapping scores heatmap.png", width = 40, height = 20, units ="cm", res =300)
+pheatmap(mapping_scores[,list], color=colorRampPalette(c("navy", "white", "orange"))(50), scale="none", cellheight = 30, cellwidth = 30, cexCol=0.5, cluster_rows=FALSE, fontsize_row=25, fontsize_col=25, cluster_cols = FALSE, legend = TRUE, fontsize = 20)
+dev.off()
+```
+
+```{r}
+Idents(mapped) <- "predicted.celltype"
+DefaultAssay(mapped) <- 'SCT'
+rna.markers <- FindAllMarkers(mapped, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./mapped_DGE_GEX_predicted.celltype.csv", quote = FALSE)
+```
+
+#DEX at the SC level
+```{r}
+mapped <- SetIdent(mapped, value = "condition")
+sc_dex_mapped <- FindMarkers(mapped, ident.1 = "WT", ident.2 = "DTR", only.pos = FALSE)
+
+sc_dex_mapped_sig<- sc_dex_mapped[sc_dex_mapped$avg_log2FC > 0.4 | sc_dex_mapped$avg_log2FC < -0.4,]
+
+sc_dex_mapped_sig<- sc_dex_mapped_sig[sc_dex_mapped_sig$p_val_adj < 0.05, ]
+
+write.csv(sc_dex_mapped_sig, file ="./sc_dex_mapped_sig.csv", quote = FALSE)
+```
+
+```{r}
+sc_dex_mapped_sig <- read.csv(file = "./sc_dex_mapped_sig.csv", header = TRUE, sep = ",")
+```
+
+#z score higher in WT
+```{r}
+wt_dex <- sc_dex_mapped_sig[sc_dex_mapped_sig$avg_log2FC > 0,]
+wt_genes <- as.vector(wt_dex$X)
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zWT <- c(wt_genes)
+pops<-list(zWT)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$WT_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "WT_z")
+
+png(filename="./mapped WT dex zscore.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "WT_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+```
+
+#z score higher in DTR
+```{r}
+dtr_dex <- sc_dex_mapped_sig[sc_dex_mapped_sig$avg_log2FC < 0,]
+dtr_genes <- as.vector(dtr_dex$X)
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zDTR <- c(dtr_genes)
+pops<-list(zDTR)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$DTR_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "DTR_z")
+
+png(filename="./mapped DTR dex zscore.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "DTR_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+```
+
+#wikipathways higher in WT
+```{r}
+p5 <- read.delim2("WikiPathways_2019_Mouse_table_WT.txt")
+
+p5['condition']='p5'
+p5['Adjusted.P.value'] <-as.numeric(p5$Adjusted.P.value)
+p5['Combined.Score'] <-as.numeric(p5$Combined.Score)
+
+p5 <- subset(p5, p5$Adjusted.P.value < 0.05)
+
+p5 <- arrange(p5,desc(Combined.Score))
+
+p5<-head(p5, 10)
+
+p5['Overlap']<-sapply(p5$Overlap, function(x) eval(parse(text=x)))
+p5['Adjusted.P.value'] <-as.numeric(p5$Adjusted.P.value)
+
+terms <- p5$Term
+
+p5['terms']=terms
+
+
+png(filename="./wikipathways WT.png", width=15, height=15, units="cm", res=600)
+ggplot(p5)+ geom_point(aes(x=Combined.Score,y=terms,color=Adjusted.P.value, size=Overlap))+
+  scale_color_gradientn(colors=c("red","lightgrey", "blue"), oob=scales::squish)  + 
+  scale_y_discrete(limits = rev(p5$terms), labels = function(y) str_wrap(y, width = 35))+
+  theme_bw()+
+  theme(aspect.ratio = 2)
+dev.off()
+```
+
+#wikipathways higher in DTR
+```{r}
+p5 <- read.delim2("WikiPathways_2019_Mouse_table_DTR.txt")
+
+p5['condition']='p5'
+p5['Adjusted.P.value'] <-as.numeric(p5$Adjusted.P.value)
+p5['Combined.Score'] <-as.numeric(p5$Combined.Score)
+
+p5 <- subset(p5, p5$Adjusted.P.value < 0.05)
+
+p5 <- arrange(p5,desc(Combined.Score))
+
+p5<-head(p5, 10)
+
+p5['Overlap']<-sapply(p5$Overlap, function(x) eval(parse(text=x)))
+p5['Adjusted.P.value'] <-as.numeric(p5$Adjusted.P.value)
+
+terms <- p5$Term
+
+p5['terms']=terms
+
+
+png(filename="./wikipathways DTR.png", width=15, height=15, units="cm", res=600)
+ggplot(p5)+ geom_point(aes(x=Combined.Score,y=terms,color=Adjusted.P.value, size=Overlap))+
+  scale_color_gradientn(colors=c("red","lightgrey", "blue"), oob=scales::squish)  + 
+  scale_y_discrete(limits = rev(p5$terms), labels = function(y) str_wrap(y, width = 35))+
+  theme_bw()+
+  theme(aspect.ratio = 2)
+dev.off()
+```
+
+#Z score of reference data subpopulations
+```{r}
+#Ccl8
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zCcl8 <- c("Ccl8","Gas6","Fabp5")
+pops<-list(zCcl8)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$Ccl8_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "Ccl8_z")
+
+png(filename="./andrew z score Ccl8.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "Ccl8_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#MHCII
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zMHCII <- c("H2-Eb1", "H2-Aa", "Cd74", "H2-Ab1")
+pops<-list(zMHCII)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$MHCII_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "MHCII_z")
+
+png(filename="./andrew z score MHCII.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "MHCII_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Trem2
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zTrem2 <- c("Trem2", "Fabp5", "Ctsd", "Gpnmb")
+pops<-list(zTrem2)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$Trem2_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "Trem2_z")
+
+png(filename="./andrew z score Trem2.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "Trem2_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Gdf15
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zGdf15 <- c("Gdf15", "Tnf", "Ccl4")
+pops<-list(zGdf15)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$Gdf15_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "Gdf15_z")
+
+png(filename="./andrew z score Gdf15.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "Gdf15_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Res
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zRes <- c("Lyve1", "Folr2", "Cd163", "Cbr2")
+pops<-list(zRes)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$Res_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "Res_z")
+
+png(filename="./andrew z score Res.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "Res_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Arg1
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zArg1 <- c("Arg1", "Fn1", "Cxcl1", "Tppp3")
+pops<-list(zArg1)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$Arg1_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "Arg1_z")
+
+png(filename="./andrew z score Arg1.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "Arg1_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Prolif
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zProlif <- c("Mki67", "Top2a", "Stmn1")
+pops<-list(zProlif)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$Prolif_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "Prolif_z")
+
+png(filename="./andrew z score Prolif.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "Prolif_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Mono
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zMono <- c("Plac8", "Ly6c2")
+pops<-list(zMono)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$Mono_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "Mono_z")
+
+png(filename="./andrew z score Mono.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "Mono_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#IFN
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zIFN <- c("Isg15", "Ifit3", "Irf7", "Cxcl10")
+pops<-list(zIFN)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$IFN_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "IFN_z")
+
+png(filename="./andrew z score IFN.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "IFN_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#cDC2
+
+DefaultAssay(mapped) <- "SCT"
+expdata <- GetAssayData(mapped)
+zcDC2 <- c("Ifitm1", "Cd209a")
+pops<-list(zcDC2)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+mapped@meta.data$cDC2_z<-z_scores[1,]
+
+DotPlot(object = mapped, features = "cDC2_z")
+
+png(filename="./andrew z score cDC2.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(mapped, features = "cDC2_z", pt.size = 2, reduction = "ref.umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+```
+
+#dot plot of z scores across predicted populations
+```{r}
+#dot plot idents set to condition
+Idents(mapped) <- mapped$predicted.celltype
+list <- c("Trem2","Gdf15","MHCII","IFN","Prolif","Arg1","cDC2","Mono","Ccl8","Res")
+mapped@active.ident <- factor(x = mapped@active.ident, levels = list)
+
+png(filename = "./z score dot plot across populations.png", width = 25, height = 20, units = "cm", res = 600)
+DotPlot(object = mapped, features = c("Trem2_z", "Gdf15_z", "MHCII_z", "IFN_z", "Prolif_z", "Arg1_z", "cDC2_z", "Mono_z", "Ccl8_z", "Res_z"))+
+  coord_fixed(ratio = 1)
+dev.off()
+
+```
+
+
+```{r}
+mapped$condition <- factor(x = mapped$condition, levels = c("WT", "DTR"))
+
+png(filename="./mapped trem2 vsig4 expression.png", width=12, height=10, units="cm", res=300)
+VlnPlot(mapped, features = c("Trem2", "Vsig4"), ncol = 3, pt.size=0.5, group.by = "condition")
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
