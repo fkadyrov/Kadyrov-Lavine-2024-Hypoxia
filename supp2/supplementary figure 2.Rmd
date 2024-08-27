@@ -1,0 +1,1988 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+```
+
+
+```{r}
+setwd("E:/hif1a arg1 paper figures 2023/2024 REVISION/publicly available datasets")
+```
+
+
+
+Dick Nat Immunol 2019: Day0/11
+PMID: 30538339
+```{r}
+#day 0
+dick0_dir <- './PMID 30538339/mf_ss/'
+dick0.data <- Read10X(data.dir =dick0_dir)
+dick0 <- CreateSeuratObject(counts = dick0.data, min.cells = 3, min.features = 200)
+dick0$condition <- "day 0"
+dick0$source <- "dick nat imm"
+dick0$library <- "dick0"
+
+
+#day 11
+dick11_dir <- './PMID 30538339/mf_mi/'
+dick11.data <- Read10X(data.dir =dick11_dir)
+dick11 <- CreateSeuratObject(counts = dick11.data, min.cells = 3, min.features = 200)
+dick11$condition <- "day 11"
+dick11$source <- "dick nat imm"
+dick11$library <- "dick11"
+```
+
+Vafadarnejad 2020, dataset 1: 10x v2 without CITE-seq, Day 0, 1, 3, 5, 7
+PMID: 32811295
+```{r}
+#day 0
+vafadarnejad0_dir <- './PMID 32811295/F8/'
+vafadarnejad0.data <- Read10X(data.dir =vafadarnejad0_dir)
+vafadarnejad0 <- CreateSeuratObject(counts = vafadarnejad0.data, min.cells = 3, min.features = 200)
+vafadarnejad0$condition <- "day 0"
+vafadarnejad0$source <- "vafadarnejad"
+vafadarnejad0$library <- "vafadarnejad0"
+
+#day 1
+vafadarnejad1_dir <- './PMID 32811295/F11/'
+vafadarnejad1.data <- Read10X(data.dir =vafadarnejad1_dir)
+vafadarnejad1 <- CreateSeuratObject(counts = vafadarnejad1.data, min.cells = 3, min.features = 200)
+vafadarnejad1$condition <- "day 1"
+vafadarnejad1$source <- "vafadarnejad"
+vafadarnejad1$library <- "vafadarnejad1"
+
+#day 3
+vafadarnejad3_dir <- './PMID 32811295/F12/'
+vafadarnejad3.data <- Read10X(data.dir =vafadarnejad3_dir)
+vafadarnejad3 <- CreateSeuratObject(counts = vafadarnejad3.data, min.cells = 3, min.features = 200)
+vafadarnejad3$condition <- "day 3"
+vafadarnejad3$source <- "vafadarnejad"
+vafadarnejad3$library <- "vafadarnejad3"
+
+#day 5
+vafadarnejad5_dir <- './PMID 32811295/G1/'
+vafadarnejad5.data <- Read10X(data.dir =vafadarnejad5_dir)
+vafadarnejad5 <- CreateSeuratObject(counts = vafadarnejad5.data, min.cells = 3, min.features = 200)
+vafadarnejad5$condition <- "day 5"
+vafadarnejad5$source <- "vafadarnejad"
+vafadarnejad5$library <- "vafadarnejad5"
+
+#day 7
+vafadarnejad7_dir <- './PMID 32811295/F9/'
+vafadarnejad7.data <- Read10X(data.dir =vafadarnejad7_dir)
+vafadarnejad7 <- CreateSeuratObject(counts = vafadarnejad7.data, min.cells = 3, min.features = 200)
+vafadarnejad7$condition <- "day 7"
+vafadarnejad7$source <- "vafadarnejad"
+vafadarnejad7$library <- "vafadarnejad7"
+```
+
+Vafadarnejad 2020, dataset 2: CITE-seq day 1/3/5
+PMID: 32811295
+```{r}
+multi135 <- Read10X("./PMID 32811295/H10")
+
+RNA <- multi135$`Gene Expression`
+Antibodies <- multi135$`Antibody Capture`
+
+ABs<- as.matrix(Antibodies)
+
+include_list <- c("Hashtag1_TotalA", "Hashtag2_TotalA", "Hashtag3_TotalA")
+
+include_list_adt<- c("Ly6G_TotalA", "MSR1_TotalA",     "F4_80_TotalA", "Ly6C_TotalA", "IA_IE_TotalA", "Cd11c_TotalA", "TIM4_TotalA", "Cx3cr1_TotalA", "Ccr2_TotalA", "CD64_TotalA")
+
+HTO <- subset(ABs, rownames(ABs) %in% include_list)
+ADT <- subset(ABs, rownames(ABs) %in% include_list_adt)
+
+H10.umis <- RNA
+H10.htos <- HTO
+joint.bcs <- intersect(colnames(H10.umis), colnames(H10.htos))
+H10.umis <- H10.umis[, joint.bcs]
+H10.htos <- as.matrix(H10.htos[, joint.bcs])
+rownames(H10.htos)
+
+multi135 <- CreateSeuratObject(counts = H10.umis)
+
+multi135[["HTO"]] <- CreateAssayObject(counts = H10.htos)
+multi135 <- NormalizeData(multi135, assay = "HTO", normalization.method = "CLR")
+multi135 <- HTODemux(multi135, assay = "HTO", positive.quantile = 0.9999)
+
+table(multi135$HTO_classification.global)
+
+# Extract the singlets
+Idents(multi135) <- "HTO_classification.global"
+multi135 <- subset(multi135, idents = "Singlet")
+
+Idents(multi135)<- "HTO_classification"
+levels(multi135)=c("Hashtag1-TotalA" ,  "Hashtag2-TotalA" , "Hashtag3-TotalA")
+
+levels(multi135)
+```
+
+Day 1: Hashtag 1, Day 3: Hashtag 2, Day 5: Hashtag 3
+```{r}
+new.cluster.ids <- c("Day 1", "Day 3","Day 5")
+names(new.cluster.ids) <- levels(multi135)
+multi135<- RenameIdents(multi135, new.cluster.ids)
+multi135 <- StashIdent(object = multi135, save.name = "Sample")
+levels(multi135)
+```
+
+```{r}
+Idents(multi135) <- "Sample"
+vafadarnejadcite1 <- subset(multi135, idents = c("Day 1"))
+vafadarnejadcite3 <- subset(multi135, idents = c("Day 3"))
+vafadarnejadcite5 <- subset(multi135, idents = c("Day 5"))
+
+vafadarnejadcite1$condition <- "day 1"
+vafadarnejadcite1$source <- "vafadarnejad_2"
+vafadarnejadcite1$library <- "multi135"
+
+vafadarnejadcite3$condition <- "day 3"
+vafadarnejadcite3$source <- "vafadarnejad_2"
+vafadarnejadcite3$library <- "multi135"
+
+vafadarnejadcite5$condition <- "day 5"
+vafadarnejadcite5$source <- "vafadarnejad_2"
+vafadarnejadcite5$library <- "multi135"
+```
+
+Rizzo Cardiovasc Res 2023 Day0 Day5
+PMID 35950218
+```{r}
+ccr2.data <- Read10X("./PMID 35950218/ccr2 libraries/library 1 preprocessing/E12_2_filtered_feature_bc_matrix")
+
+RNA <- ccr2.data$`Gene Expression`
+
+Antibodies <- ccr2.data$`Antibody Capture`
+```
+
+```{r}
+row.names(Antibodies)
+
+ABs<- as.matrix(Antibodies)
+
+row.names(ABs)
+
+include_list <- c( "Hashtag1_TotalA",  "Hashtag2_TotalA",  "Hashtag3_TotalA",  "Hashtag4_TotalA",  "Hashtag5_TotalA" , "Hashtag6_TotalA" ,"Hashtag7_TotalA",  "Hashtag8_TotalA",  "Hashtag9_TotalA",  "Hashtag10_TotalA", "Hashtag11_TotalA", "Hashtag12_TotalA")
+
+include_list_adt<- c("Ly6G_TotalA",      "CD11b_TotalA",     "CD62L_TotalA",     "IAIE_TotalA" ,     "ICAM1_TotalA",     "Ly6C_TotalA", "CD115_TotalA",     "CXCR4_TotalA" ,    "MSR1_TotalA"  ,    "CD64_TotalA"   ,   "MAR1_TotalA" ,     "CCR3_TotalA","CD49d_TotalA" ,    "CD80_TotalA" ,     "CD117_TotalA" ,  "Sca1_TotalA" ,     "CD11c_TotalA",    "TIMD4_TotalA",  "CX3CR1_TotalA",   "XCR1_TotalA"  ,    "F480_TotalA" ,    "CD86_TotalA" ,     "CD135_TotalA" ,    "CD103_TotalA" , "CD169_TotalA" ,    "CD8a_TotalA" ,     "SiglecH_TotalA" ,  "CD19_TotalA" ,     "CD3_TotalA" ,     "CD63_TotalA" ,    
+"CD9_TotalA",       "CD163_TotalA" ,    "NK11_TotalA",      "CD279_TotalA" ,    "CD127_TotalA"   ,  "CD68_TotalA"  ,   
+"Sirpa_TotalA",     "CD274_TotalA",     "ITGB7_TotalA",     "CD4_TotalA",       "LYVE1_TotalA",     "VSIG4_TotalA")
+
+HTO <- subset(ABs, rownames(ABs) %in% include_list)
+ADT <- subset(ABs, rownames(ABs) %in% include_list_adt)
+```
+
+```{r}
+ccr2i.umis <- RNA
+ccr2i.htos <- HTO
+joint.bcs <- intersect(colnames(ccr2i.umis), colnames(ccr2i.htos))
+ccr2i.umis <- ccr2i.umis[, joint.bcs]
+ccr2i.htos <- as.matrix(ccr2i.htos[, joint.bcs])
+rownames(ccr2i.htos)
+```
+
+```{r}
+antiCCR2_Lib1_re <- CreateSeuratObject(counts = ccr2i.umis)
+```
+
+```{r}
+antiCCR2_Lib1_re[["HTO"]] <- CreateAssayObject(counts = ccr2i.htos)
+antiCCR2_Lib1_re <- NormalizeData(antiCCR2_Lib1_re, assay = "HTO", normalization.method = "CLR")
+antiCCR2_Lib1_re <- HTODemux(antiCCR2_Lib1_re, assay = "HTO", positive.quantile = 0.9999)
+```
+
+```{r}
+# Global classification results
+table(antiCCR2_Lib1_re$HTO_classification.global)
+```
+
+```{r}
+Idents(antiCCR2_Lib1_re) <- "HTO_classification.global"
+antiCCR2_Lib1_re <- subset(antiCCR2_Lib1_re, idents = "Singlet")
+```
+
+```{r}
+Idents(antiCCR2_Lib1_re)<- "HTO_classification"
+```
+
+```{r}
+levels(antiCCR2_Lib1_re)
+```
+
+```{r}
+levels(antiCCR2_Lib1_re)=c("Hashtag1-TotalA" ,  "Hashtag2-TotalA" , "Hashtag3-TotalA","Hashtag4-TotalA",  "Hashtag5-TotalA",  "Hashtag6-TotalA",  "Hashtag7-TotalA", "Hashtag8-TotalA",  "Hashtag9-TotalA","Hashtag10-TotalA","Hashtag11-TotalA", "Hashtag12-TotalA")
+
+levels(antiCCR2_Lib1_re)
+```
+
+Hashtag 1 to 3: steady state heart; Hashag 4 to 7: MI Day 5, isotype control treated; Hashtag 8 to 12: MI Day 5, anti-CCR2 treated.
+```{r}
+new.cluster.ids <- c("Steady_State1", "Steady_State2", "Steady_State3", "MI_Day5_Iso1", "MI_Day5_Iso2", "MI_Day5_Iso3", "MI_Day5_Iso4", "MI_Day5_aCCR2_1", "MI_Day5_aCCR2_2", "MI_Day5_aCCR2_3", "MI_Day5_aCCR2_4", "MI_Day5_aCCR2_5")
+names(new.cluster.ids) <- levels(antiCCR2_Lib1_re)
+antiCCR2_Lib1_re<- RenameIdents(antiCCR2_Lib1_re, new.cluster.ids)
+antiCCR2_Lib1_re <- StashIdent(object = antiCCR2_Lib1_re, save.name = "Sample")
+levels(antiCCR2_Lib1_re)
+```
+
+```{r}
+Idents(antiCCR2_Lib1_re) <- "Sample"
+rizzo_e1l1_day0 <- subset(antiCCR2_Lib1_re, idents = c("Steady_State1", "Steady_State2", "Steady_State3"))
+rizzo_e1l1_day0$condition <- "day 0"
+rizzo_e1l1_day0$source <- "rizzo_2023"
+rizzo_e1l1_day0$library <- "e1l1"
+
+rizzo_e1l1_day5 <- subset(antiCCR2_Lib1_re, idents = c("MI_Day5_Iso1", "MI_Day5_Iso2", "MI_Day5_Iso3", "MI_Day5_Iso4"))
+rizzo_e1l1_day5$condition <- "day 5"
+rizzo_e1l1_day5$source <- "rizzo_2023"
+rizzo_e1l1_day5$library <- "e1l1"
+```
+
+
+```{r}
+ccr2.data <- Read10X("./PMID 35950218/ccr2 libraries/library 2 preprocessing/F1_2_filtered_feature_bc_matrix")
+```
+
+```{r}
+RNA <- ccr2.data$`Gene Expression`
+
+Antibodies <- ccr2.data$`Antibody Capture`
+
+```
+
+```{r}
+row.names(Antibodies)
+```
+
+```{r}
+row.names(Antibodies)
+
+ABs<- as.matrix(Antibodies)
+
+row.names(ABs)
+
+include_list <- c( "Hashtag1_TotalA",  "Hashtag2_TotalA",  "Hashtag3_TotalA",  "Hashtag4_TotalA",  "Hashtag5_TotalA" , "Hashtag6_TotalA" ,"Hashtag7_TotalA",  "Hashtag8_TotalA",  "Hashtag9_TotalA",  "Hashtag10_TotalA", "Hashtag11_TotalA", "Hashtag12_TotalA")
+
+include_list_adt<- c("Ly6G_TotalA",      "CD11b_TotalA",     "CD62L_TotalA",     "IAIE_TotalA" ,     "ICAM1_TotalA",     "Ly6C_TotalA", "CD115_TotalA",     "CXCR4_TotalA" ,    "MSR1_TotalA"  ,    "CD64_TotalA"   ,   "MAR1_TotalA" ,     "CCR3_TotalA","CD49d_TotalA" ,    "CD80_TotalA" ,     "CD117_TotalA" ,  "Sca1_TotalA" ,     "CD11c_TotalA",    "TIMD4_TotalA",  "CX3CR1_TotalA",   "XCR1_TotalA"  ,    "F480_TotalA" ,    "CD86_TotalA" ,     "CD135_TotalA" ,    "CD103_TotalA" , "CD169_TotalA" ,    "CD8a_TotalA" ,     "SiglecH_TotalA" ,  "CD19_TotalA" ,     "CD3_TotalA" ,     "CD63_TotalA" ,    
+"CD9_TotalA",       "CD163_TotalA" ,    "NK11_TotalA",      "CD279_TotalA" ,    "CD127_TotalA"   ,  "CD68_TotalA"  ,   
+"Sirpa_TotalA",     "CD274_TotalA",     "ITGB7_TotalA",     "CD4_TotalA",       "LYVE1_TotalA",     "VSIG4_TotalA")
+
+HTO <- subset(ABs, rownames(ABs) %in% include_list)
+ADT <- subset(ABs, rownames(ABs) %in% include_list_adt)
+
+
+
+
+```
+
+```{r}
+ccr2i.umis <- RNA
+
+ccr2i.htos <- HTO
+
+joint.bcs <- intersect(colnames(ccr2i.umis), colnames(ccr2i.htos))
+
+ccr2i.umis <- ccr2i.umis[, joint.bcs]
+ccr2i.htos <- as.matrix(ccr2i.htos[, joint.bcs])
+
+rownames(ccr2i.htos)
+```
+
+```{r}
+antiCCR2_Lib2_re <- CreateSeuratObject(counts = ccr2i.umis)
+```
+
+```{r}
+antiCCR2_Lib2_re[["HTO"]] <- CreateAssayObject(counts = ccr2i.htos)
+antiCCR2_Lib2_re <- NormalizeData(antiCCR2_Lib2_re, assay = "HTO", normalization.method = "CLR")
+antiCCR2_Lib2_re <- HTODemux(antiCCR2_Lib2_re, assay = "HTO", positive.quantile = 0.9999)
+```
+
+```{r}
+# Global classification results
+table(antiCCR2_Lib2_re$HTO_classification.global)
+```
+
+```{r}
+Idents(antiCCR2_Lib2_re) <- "HTO_classification.global"
+antiCCR2_Lib2_re <- subset(antiCCR2_Lib2_re, idents = "Singlet")
+```
+
+```{r}
+Idents(antiCCR2_Lib2_re)<- "HTO_classification"
+```
+
+```{r}
+levels(antiCCR2_Lib2_re)
+```
+
+```{r}
+levels(antiCCR2_Lib2_re)=c("Hashtag1-TotalA" ,  "Hashtag2-TotalA" , "Hashtag3-TotalA","Hashtag4-TotalA",  "Hashtag5-TotalA",  "Hashtag6-TotalA",  "Hashtag7-TotalA", "Hashtag8-TotalA",  "Hashtag9-TotalA","Hashtag10-TotalA","Hashtag11-TotalA", "Hashtag12-TotalA")
+
+levels(antiCCR2_Lib2_re)
+```
+
+Hashtag 1 to 3: steady state heart; Hashag 4 to 7: MI Day 5, isotype control treated; Hashtag 8 to 12: MI Day 5, anti-CCR2 treated.
+```{r}
+new.cluster.ids <- c("Steady_State1", "Steady_State2", "Steady_State3", "MI_Day5_Iso1", "MI_Day5_Iso2", "MI_Day5_Iso3", "MI_Day5_Iso4", "MI_Day5_aCCR2_1", "MI_Day5_aCCR2_2", "MI_Day5_aCCR2_3", "MI_Day5_aCCR2_4", "MI_Day5_aCCR2_5")
+names(new.cluster.ids) <- levels(antiCCR2_Lib2_re)
+antiCCR2_Lib2_re<- RenameIdents(antiCCR2_Lib2_re, new.cluster.ids)
+antiCCR2_Lib2_re <- StashIdent(object = antiCCR2_Lib2_re, save.name = "Sample")
+levels(antiCCR2_Lib2_re)
+```
+
+```{r}
+Idents(antiCCR2_Lib2_re) <- "Sample"
+rizzo_e1l2_day0 <- subset(antiCCR2_Lib2_re, idents = c("Steady_State1", "Steady_State2", "Steady_State3"))
+rizzo_e1l2_day0$condition <- "day 0"
+rizzo_e1l2_day0$source <- "rizzo_2023"
+rizzo_e1l2_day0$library <- "e1l2"
+
+rizzo_e1l2_day5 <- subset(antiCCR2_Lib2_re, idents = c("MI_Day5_Iso1", "MI_Day5_Iso2", "MI_Day5_Iso3", "MI_Day5_Iso4"))
+rizzo_e1l2_day5$condition <- "day 5"
+rizzo_e1l2_day5$source <- "rizzo_2023"
+rizzo_e1l2_day5$library <- "e1l2"
+```
+
+```{r}
+Trem2.data <- Read10X("./PMID 35950218/trem2 libraries/library 1 preprocessing/G8_2_filtered_feature_bc_matrix")
+```
+
+
+```{r}
+RNA <- Trem2.data$`Gene Expression`
+
+Antibodies <- Trem2.data$`Antibody Capture`
+
+```
+
+```{r}
+rownames(Antibodies)
+```
+
+
+**rename some ADT markers to fit the CCR2 experiment when merging**
+
+```{r}
+rownames(Antibodies)=gsub("FCeRIa", "MAR1", rownames(Antibodies))
+```
+
+```{r}
+rownames(Antibodies)
+```
+
+```{r}
+rownames(Antibodies)=gsub("TIM4", "TIMD4", rownames(Antibodies))
+```
+
+```{r}
+ABs<- as.matrix(Antibodies)
+
+
+include_list <- c( "Hashtag1_TotalA",  "Hashtag2_TotalA",  "Hashtag3_TotalA",  "Hashtag4_TotalA",  "Hashtag5_TotalA" , "Hashtag6_TotalA" ,"Hashtag7_TotalA",  "Hashtag8_TotalA",  "Hashtag9_TotalA",  "Hashtag10_TotalA", "Hashtag11_TotalA", "Hashtag12_TotalA","Hashtag13_TotalA", "Hashtag14_TotalA", "Hashtag15_TotalA")
+
+include_list_adt<- c("Ly6G_TotalA",      "CD11b_TotalA",     "CD62L_TotalA",     "IAIE_TotalA" ,     "ICAM1_TotalA",     "Ly6C_TotalA", "CD115_TotalA",     "CXCR4_TotalA" ,    "MSR1_TotalA"  ,    "CD64_TotalA"   ,   "MAR1_TotalA" ,     "CCR3_TotalA","CD49d_TotalA" ,    "CD80_TotalA" ,     "CD117_TotalA" ,  "Sca1_TotalA" ,     "CD11c_TotalA",    "TIMD4_TotalA",  "CX3CR1_TotalA",   "XCR1_TotalA"  ,    "F480_TotalA" ,    "CD86_TotalA" ,     "CD135_TotalA" ,    "CD103_TotalA" , "CD169_TotalA" ,    "CD8a_TotalA" ,     "SiglecH_TotalA" ,  "CD19_TotalA" ,     "CD3_TotalA" ,     "CD63_TotalA" ,    
+"CD9_TotalA",       "CD163_TotalA" ,    "NK11_TotalA",      "CD279_TotalA" ,    "CD127_TotalA"   ,  "CD68_TotalA"  ,   
+"Sirpa_TotalA",     "CD274_TotalA",     "ITGB7_TotalA",     "CD4_TotalA",  "TCRgd_TotalA" ,    "MGL2_TotalA" ,     "CD26_TotalA" ,     "LYVE1_TotalA",     "VSIG4_TotalA")
+
+HTO <- subset(ABs, rownames(ABs) %in% include_list)
+ADT <- subset(ABs, rownames(ABs) %in% include_list_adt)
+
+
+
+
+```
+
+
+```{r}
+Trem2i.umis <- RNA
+
+Trem2i.htos <- HTO
+
+joint.bcs <- intersect(colnames(Trem2i.umis), colnames(Trem2i.htos))
+
+Trem2i.umis <- Trem2i.umis[, joint.bcs]
+Trem2i.htos <- as.matrix(Trem2i.htos[, joint.bcs])
+
+rownames(Trem2i.htos)
+```
+
+```{r}
+TREM2_MI_LIB1_re <- CreateSeuratObject(counts = Trem2i.umis)
+```
+
+
+```{r}
+TREM2_MI_LIB1_re[["HTO"]] <- CreateAssayObject(counts = Trem2i.htos)
+TREM2_MI_LIB1_re <- NormalizeData(TREM2_MI_LIB1_re, assay = "HTO", normalization.method = "CLR")
+TREM2_MI_LIB1_re <- HTODemux(TREM2_MI_LIB1_re, assay = "HTO", positive.quantile = 0.9999)
+```
+
+```{r}
+# Global classification results
+table(TREM2_MI_LIB1_re$HTO_classification.global)
+```
+
+```{r}
+Idents(TREM2_MI_LIB1_re) <- "HTO_classification.global"
+TREM2_MI_LIB1_re <- subset(TREM2_MI_LIB1_re, idents = "Singlet")
+```
+
+```{r}
+Idents(TREM2_MI_LIB1_re)<- "HTO_classification"
+```
+
+```{r}
+levels(TREM2_MI_LIB1_re)
+```
+
+```{r}
+levels(TREM2_MI_LIB1_re)=c("Hashtag1-TotalA" ,  "Hashtag2-TotalA" , "Hashtag3-TotalA","Hashtag4-TotalA",  "Hashtag5-TotalA",  "Hashtag6-TotalA",  "Hashtag7-TotalA", "Hashtag8-TotalA",  "Hashtag9-TotalA","Hashtag10-TotalA","Hashtag11-TotalA", "Hashtag12-TotalA","Hashtag13-TotalA","Hashtag14-TotalA","Hashtag15-TotalA")
+
+levels(TREM2_MI_LIB1_re)
+```
+
+Hashtag 1-2: WT no MI; Hashtag 3, 4 and 15: Trem2-/- no MI; Hahstag 5, 6, 7, 8, 9: wildtype MI day 5; Hashtag 10, 11, 12, 13, 14: Trem2-/- MI day 5. 
+```{r}
+new.cluster.ids <- c("WT_NoMI_1", "WT_NoMI_2","TREM2-KO_NoMI_1", "TREM2-KO_NoMI_2","WT_MIDay5_1", "WT_MIDay5_2", "WT_MIDay5_3", "WT_MIDay5_4", "WT_MIDay5_5", "TREM2-KO_MIDay5_1", "TREM2-KO_MIDay5_2","TREM2-KO_MIDay5_3","TREM2-KO_MIDay5_4","TREM2-KO_MIDay5_5", "TREM2-KO_NoMI_3")
+names(new.cluster.ids) <- levels(TREM2_MI_LIB1_re)
+TREM2_MI_LIB1_re<- RenameIdents(TREM2_MI_LIB1_re, new.cluster.ids)
+TREM2_MI_LIB1_re <- StashIdent(object = TREM2_MI_LIB1_re, save.name = "Sample")
+levels(TREM2_MI_LIB1_re)
+```
+
+```{r}
+Idents(TREM2_MI_LIB1_re) <- "Sample"
+rizzo_e2l1_day0 <- subset(TREM2_MI_LIB1_re, idents = c("WT_NoMI_1", "WT_NoMI_2"))
+rizzo_e2l1_day0$condition <- "day 0"
+rizzo_e2l1_day0$source <- "rizzo_2023"
+rizzo_e2l1_day0$library <- "e2l1"
+
+rizzo_e2l1_day5 <- subset(TREM2_MI_LIB1_re, idents = c("WT_MIDay5_1", "WT_MIDay5_2", "WT_MIDay5_3", "WT_MIDay5_4", "WT_MIDay5_5"))
+rizzo_e2l1_day5$condition <- "day 5"
+rizzo_e2l1_day5$source <- "rizzo_2023"
+rizzo_e2l1_day5$library <- "e2l1"
+```
+
+```{r}
+Trem2.data <- Read10X("./PMID 35950218/trem2 libraries/library 2 preprocessing/G9_2_filtered_feature_bc_matrix")
+```
+
+```{r}
+RNA <- Trem2.data$`Gene Expression`
+
+Antibodies <- Trem2.data$`Antibody Capture`
+
+```
+
+```{r}
+rownames(Antibodies)
+```
+
+**rename some ADT markers to fit the CCR2 experiment when merging**
+
+```{r}
+rownames(Antibodies)=gsub("FCeRIa", "MAR1", rownames(Antibodies))
+```
+
+```{r}
+rownames(Antibodies)
+```
+
+```{r}
+rownames(Antibodies)=gsub("TIM4", "TIMD4", rownames(Antibodies))
+```
+
+
+```{r}
+rownames(Antibodies)
+```
+
+```{r}
+ABs<- as.matrix(Antibodies)
+
+
+include_list <- c( "Hashtag1_TotalA",  "Hashtag2_TotalA",  "Hashtag3_TotalA",  "Hashtag4_TotalA",  "Hashtag5_TotalA" , "Hashtag6_TotalA" ,"Hashtag7_TotalA",  "Hashtag8_TotalA",  "Hashtag9_TotalA",  "Hashtag10_TotalA", "Hashtag11_TotalA", "Hashtag12_TotalA","Hashtag13_TotalA", "Hashtag14_TotalA", "Hashtag15_TotalA")
+
+include_list_adt<- c("Ly6G_TotalA",      "CD11b_TotalA",     "CD62L_TotalA",     "IAIE_TotalA" ,     "ICAM1_TotalA",     "Ly6C_TotalA", "CD115_TotalA",     "CXCR4_TotalA" ,    "MSR1_TotalA"  ,    "CD64_TotalA"   ,   "MAR1_TotalA" ,     "CCR3_TotalA","CD49d_TotalA" ,    "CD80_TotalA" ,     "CD117_TotalA" ,  "Sca1_TotalA" ,     "CD11c_TotalA",    "TIMD4_TotalA",  "CX3CR1_TotalA",   "XCR1_TotalA"  ,    "F480_TotalA" ,    "CD86_TotalA" ,     "CD135_TotalA" ,    "CD103_TotalA" , "CD169_TotalA" ,    "CD8a_TotalA" ,     "SiglecH_TotalA" ,  "CD19_TotalA" ,     "CD3_TotalA" ,     "CD63_TotalA" ,    
+"CD9_TotalA",       "CD163_TotalA" ,    "NK11_TotalA",      "CD279_TotalA" ,    "CD127_TotalA"   ,  "CD68_TotalA"  ,   
+"Sirpa_TotalA",     "CD274_TotalA",     "ITGB7_TotalA",     "CD4_TotalA",  "TCRgd_TotalA" ,    "MGL2_TotalA" ,     "CD26_TotalA" ,     "LYVE1_TotalA",     "VSIG4_TotalA")
+
+HTO <- subset(ABs, rownames(ABs) %in% include_list)
+ADT <- subset(ABs, rownames(ABs) %in% include_list_adt)
+
+
+```
+
+
+```{r}
+Trem2i.umis <- RNA
+
+Trem2i.htos <- HTO
+
+joint.bcs <- intersect(colnames(Trem2i.umis), colnames(Trem2i.htos))
+
+Trem2i.umis <- Trem2i.umis[, joint.bcs]
+Trem2i.htos <- as.matrix(Trem2i.htos[, joint.bcs])
+
+rownames(Trem2i.htos)
+```
+
+```{r}
+TREM2_MI_LIB2_re <- CreateSeuratObject(counts = Trem2i.umis)
+```
+
+```{r}
+TREM2_MI_LIB2_re[["HTO"]] <- CreateAssayObject(counts = Trem2i.htos)
+TREM2_MI_LIB2_re <- NormalizeData(TREM2_MI_LIB2_re, assay = "HTO", normalization.method = "CLR")
+TREM2_MI_LIB2_re <- HTODemux(TREM2_MI_LIB2_re, assay = "HTO", positive.quantile = 0.9999)
+```
+
+```{r}
+# Global classification results
+table(TREM2_MI_LIB2_re$HTO_classification.global)
+```
+
+```{r}
+Idents(TREM2_MI_LIB2_re) <- "HTO_classification.global"
+TREM2_MI_LIB2_re <- subset(TREM2_MI_LIB2_re, idents = "Singlet")
+```
+
+```{r}
+Idents(TREM2_MI_LIB2_re)<- "HTO_classification"
+```
+
+```{r}
+levels(TREM2_MI_LIB2_re)
+```
+
+```{r}
+levels(TREM2_MI_LIB2_re)=c("Hashtag1-TotalA" ,  "Hashtag2-TotalA" , "Hashtag3-TotalA","Hashtag4-TotalA",  "Hashtag5-TotalA",  "Hashtag6-TotalA",  "Hashtag7-TotalA", "Hashtag8-TotalA",  "Hashtag9-TotalA","Hashtag10-TotalA","Hashtag11-TotalA", "Hashtag12-TotalA","Hashtag13-TotalA","Hashtag14-TotalA","Hashtag15-TotalA")
+
+levels(TREM2_MI_LIB2_re)
+```
+
+Hashtag 1-2: WT no MI; Hashtag 3, 4 and 15: Trem2-/- no MI; Hahstag 5, 6, 7, 8, 9: wildtype MI day 5; Hashtag 10, 11, 12, 13, 14: Trem2-/- MI day 5
+```{r}
+new.cluster.ids <- c("WT_NoMI_1", "WT_NoMI_2","TREM2-KO_NoMI_1", "TREM2-KO_NoMI_2","WT_MIDay5_1", "WT_MIDay5_2", "WT_MIDay5_3", "WT_MIDay5_4", "WT_MIDay5_5", "TREM2-KO_MIDay5_1", "TREM2-KO_MIDay5_2","TREM2-KO_MIDay5_3","TREM2-KO_MIDay5_4","TREM2-KO_MIDay5_5", "TREM2-KO_NoMI_3")
+names(new.cluster.ids) <- levels(TREM2_MI_LIB2_re)
+TREM2_MI_LIB2_re<- RenameIdents(TREM2_MI_LIB2_re, new.cluster.ids)
+TREM2_MI_LIB2_re <- StashIdent(object = TREM2_MI_LIB2_re, save.name = "Sample")
+levels(TREM2_MI_LIB2_re)
+```
+
+```{r}
+Idents(TREM2_MI_LIB2_re) <- "Sample"
+rizzo_e2l2_day0 <- subset(TREM2_MI_LIB2_re, idents = c("WT_NoMI_1", "WT_NoMI_2"))
+rizzo_e2l2_day0$condition <- "day 0"
+rizzo_e2l2_day0$source <- "rizzo_2023"
+rizzo_e2l2_day0$library <- "e2l2"
+
+rizzo_e2l2_day5 <- subset(TREM2_MI_LIB2_re, idents = c("WT_MIDay5_1", "WT_MIDay5_2", "WT_MIDay5_3", "WT_MIDay5_4", "WT_MIDay5_5"))
+rizzo_e2l2_day5$condition <- "day 5"
+rizzo_e2l2_day5$source <- "rizzo_2023"
+rizzo_e2l2_day5$library <- "e2l2"
+```
+
+
+Farbehi_TIP eLife 2019 Day 0/3/7
+TIP fraction
+
+```{r}
+
+#sham TIP
+farbehi0_dir <- './PMID 30912746/Sham_day7_TIP/filtered_feature_bc_matrix/'
+farbehi0.data <- Read10X(data.dir = farbehi0_dir)
+farbehi0 <- CreateSeuratObject(counts = farbehi0.data, min.cells = 3, min.features = 200)
+farbehi0$condition <- "day 0"
+farbehi0$source <- "farbehi elife"
+farbehi0$library <- "farbehi0"
+
+#day 3 TIP
+farbehi3_dir <- './PMID 30912746/MI_day3_TIP/filtered_feature_bc_matrix/'
+farbehi3.data <- Read10X(data.dir = farbehi3_dir)
+farbehi3 <- CreateSeuratObject(counts = farbehi3.data, min.cells = 3, min.features = 200)
+farbehi3$condition <- "day 3"
+farbehi3$source <- "farbehi elife"
+farbehi3$library <- "farbehi3"
+
+#day 7 TIP
+farbehi7_dir <- './PMID 30912746/MI_day7_TIP/filtered_feature_bc_matrix/'
+farbehi7.data <- Read10X(data.dir = farbehi7_dir)
+farbehi7 <- CreateSeuratObject(counts = farbehi7.data, min.cells = 3, min.features = 200)
+farbehi7$condition <- "day 7"
+farbehi7$source <- "farbehi elife"
+farbehi7$library <- "farbehi7"
+```
+
+
+```{r}
+merged <- merge(dick0, y = c(dick11, vafadarnejad0, vafadarnejad1, vafadarnejad3, vafadarnejad5, vafadarnejad7, vafadarnejadcite1, vafadarnejadcite3, vafadarnejadcite5, rizzo_e1l1_day0, rizzo_e1l1_day5, rizzo_e1l2_day0, rizzo_e1l2_day5, rizzo_e2l1_day0, rizzo_e2l1_day5, rizzo_e2l2_day0, rizzo_e2l2_day5, farbehi0, farbehi3, farbehi7))
+```
+
+```{r}
+rm(dick0)
+rm(dick11)
+rm(vafadarnejad0)
+rm(vafadarnejad1)
+rm(vafadarnejad3)
+rm(vafadarnejad5)
+rm(vafadarnejad7)
+rm(vafadarnejadcite1)
+rm(vafadarnejadcite3)
+rm(vafadarnejadcite5)
+rm(rizzo_e1l1_day0)
+rm(rizzo_e1l1_day5)
+rm(rizzo_e1l2_day0)
+rm(rizzo_e1l2_day5)
+rm(rizzo_e2l1_day0)
+rm(rizzo_e2l1_day5)
+rm(rizzo_e2l2_day0)
+rm(rizzo_e2l2_day5)
+rm(farbehi0)
+rm(farbehi3)
+rm(farbehi7)
+gc()
+```
+
+```{r}
+merged[["propmt"]] <- PercentageFeatureSet(merged, pattern = "^mt-")
+```
+
+```{r}
+png(filename="./pre qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged, features = c("nFeature_RNA", "nCount_RNA", "propmt"), group.by = "orig.ident", ncol = 3, pt.size=0)
+dev.off()
+```
+
+```{r}
+merged2 <- subset(merged, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & propmt < 10 & nCount_RNA < 40000)
+```
+
+
+```{r}
+png(filename="./qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged2, features = c("nFeature_RNA", "nCount_RNA", "propmt"), group.by = "orig.ident", ncol = 3, pt.size=0)
+dev.off()
+```
+
+#harmony
+```{r}
+view <- merged2@meta.data$source
+view <- unique(view)
+view
+
+lib <- merged2@meta.data$library
+lib <- unique(lib)
+lib
+```
+
+```{r}
+DefaultAssay(merged2)<- "RNA"
+merged2 <- NormalizeData(merged2, verbose = FALSE)
+merged2 <-FindVariableFeatures(merged2, selection.method = "vst", nfeatures = 2000)
+merged2 <-ScaleData(merged2,verbose = FALSE) 
+merged2 <-RunPCA(merged2, verbose = FALSE)
+
+merged2 <- merged2 %>% 
+    RunHarmony("library", plot_convergence = TRUE)
+merged2 <- merged2 %>% 
+    RunUMAP(reduction = "harmony", dims = 1:20, return.model = TRUE) %>% 
+    FindNeighbors(reduction = "harmony", dims = 1:20) %>% 
+    FindClusters(resolution = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)) %>% 
+    identity()
+
+```
+
+
+```{r}
+saveRDS(merged2, "./merged2.rds")
+```
+
+```{r}
+merged2 <- readRDS('./merged2.rds')
+```
+
+```{r}
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.1")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.2")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.3")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.4")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.5")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.6")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.7")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.8")
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.9")
+```
+
+
+```{r}
+merged2 <- JoinLayers(merged2)
+```
+
+
+```{r}
+zs = function(object, genelist) {
+
+DefaultAssay(object) <- "RNA"
+expdata <- GetAssayData(object)
+zgenelist<-  genelist
+pops<-list(zgenelist)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+object@meta.data$z<-z_scores[1,]
+
+zobj <- object
+
+FeaturePlot(zobj, features = "z", pt.size = 1.0, reduction = "umap")&
+  coord_fixed() & 
+  scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))  
+
+}
+```
+
+
+```{r}
+#rtm signature
+zs(merged2, c("F13a1", "Folr2"))
+```
+
+```{r}
+#mi mac signature
+zs(merged2, c("Ms4a7", "Lgmn"))
+```
+
+```{r}
+#monocytes signature
+zs(merged2, c("Chil3", "Ccr2"))
+```
+
+```{r}
+#proliferating signature
+zs(merged2, c("Birc5", "Mki67"))
+```
+
+```{r}
+#neutrophils signature
+zs(merged2, c("S100a9", "S100a8"))
+```
+
+```{r}
+#bcells signature
+zs(merged2, c("Ms4a1", "Cd79a"))
+```
+
+```{r}
+#tnk signature
+zs(merged2, c("Trbc1", "Nkg7"))
+```
+
+```{r}
+#cdc1 signature
+zs(merged2, c("Ifi205", "Naaa"))
+```
+
+```{r}
+#cdc2 signature
+zs(merged2, c("Napsa", "Cd209a"))
+```
+
+```{r}
+#pdc signature
+zs(merged2, c('Ccr9', 'Siglech'))
+```
+
+```{r}
+#endothelium signature
+zs(merged2, c("Cav1", "Kdr"))
+```
+
+```{r}
+#fibroblast signature
+zs(merged2, c('Postn', 'Col1a1'))
+```
+
+
+
+
+```{r}
+png(filename="./merged2 0.1 res.png", width=20, height=20, units="cm", res=300)
+DimPlot(merged2, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.1")
+dev.off()
+```
+
+
+
+```{r}
+DefaultAssay(merged2) <- 'RNA'
+Idents(merged2) <- "RNA_snn_res.0.1"
+rna.markers <- FindAllMarkers(merged2, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged2_res0.1.csv", quote = FALSE)
+```
+
+
+
+
+
+```{r}
+merged2$condition <- factor(merged2$condition, levels = c('day 0', 'day 1', 'day 3', 'day 5', 'day 7', 'day 11'))
+DimPlot(merged2, group.by = "RNA_snn_res.0.1", split.by = "condition", label = TRUE)
+```
+
+```{r}
+DimPlot(merged2, group.by = "RNA_snn_res.0.1", split.by = "source", label = TRUE)
+```
+
+
+```{r}
+Idents(merged2) <- "RNA_snn_res.0.1"
+
+#0 mac
+#1 mac
+#2 endothelial
+#3 fibroblasts
+#4 neutrophils
+#5 bcells
+#6 proliferating
+#7 dc
+#8 tnk
+#9 bcells
+
+
+merged3 <- subset(merged2, idents = c(0, 1, 6, 7))
+```
+
+
+
+
+```{r}
+DefaultAssay(merged3)<- "RNA"
+merged3 <- NormalizeData(merged3, verbose = FALSE)
+merged3 <-FindVariableFeatures(merged3, selection.method = "vst", nfeatures = 2000)
+merged3 <-ScaleData(merged3,verbose = FALSE) 
+merged3 <-RunPCA(merged3, verbose = FALSE)
+
+merged3 <- merged3 %>% 
+    RunHarmony("library", plot_convergence = TRUE)
+merged3 <- merged3 %>% 
+    RunUMAP(reduction = "harmony", dims = 1:20, return.model = TRUE) %>% 
+    FindNeighbors(reduction = "harmony", dims = 1:20) %>% 
+    FindClusters(resolution = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)) %>% 
+    identity()
+
+```
+
+
+```{r}
+saveRDS(merged3, "./merged3.rds")
+```
+
+```{r}
+merged3 <- readRDS('./merged3.rds')
+```
+
+```{r}
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.1")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.2")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.3")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.4")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.5")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.6")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.7")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.8")
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.9")
+```
+
+
+
+
+
+
+```{r}
+#rtm signature
+zs(merged3, c("F13a1", "Folr2"))
+```
+
+```{r}
+#mi mac signature
+zs(merged3, c("Ms4a7", "Lgmn"))
+```
+
+```{r}
+#monocytes signature
+zs(merged3, c("Chil3", "Ccr2"))
+```
+
+```{r}
+#proliferating signature
+zs(merged3, c("Birc5", "Mki67"))
+```
+
+```{r}
+#neutrophils signature
+zs(merged3, c("S100a9", "S100a8"))
+```
+
+```{r}
+#bcells signature
+zs(merged3, c("Ms4a1", "Cd79a"))
+```
+
+```{r}
+#tnk signature
+zs(merged3, c("Trbc1", "Nkg7"))
+```
+
+```{r}
+#cdc1 signature
+zs(merged3, c("Ifi205", "Naaa"))
+```
+
+```{r}
+#cdc2 signature
+zs(merged3, c("Napsa", "Cd209a"))
+```
+
+```{r}
+#pdc signature
+zs(merged3, c('Ccr9', 'Siglech'))
+```
+
+```{r}
+#endothelium signature
+zs(merged3, c("Cav1", "Kdr"))
+```
+
+```{r}
+#fibroblast signature
+zs(merged3, c('Postn', 'Col1a1'))
+```
+
+
+
+```{r}
+#rtm timd4
+zs(merged3, c('Lyve1', 'Folr2', 'Cd163', 'Klf2', 'Cfh', 'Cbr2', 'F13a1'))
+```
+
+```{r}
+#rtm mhcii
+zs(merged3, c('H2-Aa', 'H2-Ab1', 'Cd83', 'Cd81', 'Cd74', 'Atf3', 'Egr1'))
+```
+
+```{r}
+#mhcii il1b
+zs(merged3, c('Cd72', 'Il1b', 'Tnip3', 'Tlr2', 'Slamf9', 'Ccrl2', 'Ccr2'))
+```
+
+```{r}
+#ly6c hi mono
+zs(merged3, c('Ly6c2', 'Plac8', 'Chil3'))
+```
+
+```{r}
+#ly6c lo mono
+zs(merged3, c('Ear2', 'Ace', 'Treml4', 'Itgal'))
+```
+
+```{r}
+#trem2 spp1
+zs(merged3, c('Lgals3', 'Ctsd', 'Ctsl', 'Fabp5', 'Gpnmb', 'Arg1', 'Anxa', 'Spp1'))
+```
+
+```{r}
+#trem2 gdf15
+zs(merged3, c('Selenop', 'Psap', 'Gdf15', 'Apoe', 'Fcrls', 'Fabp4'))
+```
+
+```{r}
+#trem2 prdx1
+zs(merged3, c('Prdx1', 'Slc40a1', 'Ftl1', 'Fth1'))
+```
+
+```{r}
+#isg15
+zs(merged3, c('Isg15', 'Rsad2', 'Oasl', 'Cxcl10'))
+```
+
+```{r}
+#fn1 ltc4s
+zs(merged3, c('Fn1', 'Prtn3', 'C4b', 'Ecm1'))
+```
+
+```{r}
+#prolif s
+zs(merged3, c('Mcm2', 'Stmn1', 'Ccnd1'))
+```
+
+```{r}
+#prolif g2m
+zs(merged3, c('Birc5', 'Mki67', 'Top2a'))
+```
+
+```{r}
+#low rna
+zs(merged3, c('Fam71a', 'Gm3336', 'Gm33195'))
+```
+
+```{r}
+png(filename="./merged3 0.7 res.png", width=20, height=20, units="cm", res=300)
+DimPlot(merged3, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.7")
+dev.off()
+```
+
+
+
+```{r}
+DefaultAssay(merged3) <- 'RNA'
+Idents(merged3) <- "RNA_snn_res.0.7"
+rna.markers <- FindAllMarkers(merged3, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged3_res0.7.csv", quote = FALSE)
+```
+
+
+
+```{r}
+Idents(merged3) <- "RNA_snn_res.0.7"
+
+#0 ly6c hi mono
+#1 trem2 spp1
+#2 trem2 gdf15
+#3 trem2 gdf15
+#4 rtm mhcii
+#5 rtm timd4
+#6 trem2 spp1
+#7 cdc2
+#8 isg15
+#9 prolif g2m
+#10 fn1 ltc4s
+#11 prolif s
+#12 erythroblast
+#13 endothelium
+#14 ly6c lo mono
+#15 cdc1
+#16 fibroblast
+#17 endothelium
+#18 cardiomyocytes
+#19 cdc2
+#20 pdc
+#21 bcells
+
+merged4 <- subset(merged3, idents = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 19))
+```
+
+
+
+
+
+```{r}
+DefaultAssay(merged4)<- "RNA"
+merged4 <- NormalizeData(merged4, verbose = FALSE)
+merged4 <-FindVariableFeatures(merged4, selection.method = "vst", nfeatures = 2000)
+merged4 <-ScaleData(merged4,verbose = FALSE) 
+merged4 <-RunPCA(merged4, verbose = FALSE)
+
+merged4 <- merged4 %>% 
+    RunHarmony("library", plot_convergence = TRUE)
+merged4 <- merged4 %>% 
+    RunUMAP(reduction = "harmony", dims = 1:20, return.model = TRUE) %>% 
+    FindNeighbors(reduction = "harmony", dims = 1:20) %>% 
+    FindClusters(resolution = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)) %>% 
+    identity()
+
+```
+
+
+```{r}
+saveRDS(merged4, "./merged4.rds")
+```
+
+```{r}
+merged4 <- readRDS('./merged4.rds')
+```
+
+```{r}
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.1")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.2")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.3")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.4")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.5")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.6")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.7")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.8")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.9", split.by = "source")
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.9", split.by = "condition")
+```
+
+
+```{r}
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+
+s.genes <-tolower(s.genes)
+g2m.genes <- tolower(g2m.genes)
+
+simpleCap <- function(x) {
+  s <- strsplit(x, " ")[[1]]
+  paste(toupper(substring(s, 1,1)), substring(s, 2),
+      sep="", collapse=" ")
+}
+
+s.genes <- sapply(s.genes, simpleCap)
+g2m.genes <-sapply(g2m.genes, simpleCap)
+```
+
+```{r}
+merged4 <- CellCycleScoring(merged4, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+VlnPlot(merged4, features = c("S.Score", "G2M.Score"), pt.size = 0, group.by = "RNA_snn_res.0.9")
+```
+
+
+```{r}
+#rtm signature
+zs(merged4, c("F13a1", "Folr2"))
+```
+
+```{r}
+#mi mac signature
+zs(merged4, c("Ms4a7", "Lgmn"))
+```
+
+```{r}
+#monocytes signature
+zs(merged4, c("Chil3", "Ccr2"))
+```
+
+```{r}
+#proliferating signature
+zs(merged4, c("Birc5", "Mki67"))
+```
+
+
+```{r}
+#cdc2 signature
+zs(merged4, c("Napsa", "Cd209a"))
+```
+
+
+```{r}
+#rtm timd4
+zs(merged4, c('Lyve1', 'Folr2', 'Cd163', 'Klf2', 'Cfh', 'Cbr2', 'F13a1'))
+```
+
+```{r}
+#rtm mhcii
+zs(merged4, c('H2-Aa', 'H2-Ab1', 'Cd83', 'Cd81', 'Cd74', 'Atf3', 'Egr1'))
+```
+
+```{r}
+#mhcii il1b
+zs(merged4, c('Cd72', 'Il1b', 'Tnip3', 'Tlr2', 'Slamf9', 'Ccrl2', 'Ccr2'))
+```
+
+```{r}
+#ly6c hi mono
+zs(merged4, c('Ly6c2', 'Plac8', 'Chil3'))
+```
+
+```{r}
+#ly6c lo mono
+zs(merged4, c('Ear2', 'Ace', 'Treml4', 'Itgal'))
+```
+
+```{r}
+#trem2 spp1
+zs(merged4, c('Lgals3', 'Ctsd', 'Ctsl', 'Fabp5', 'Gpnmb', 'Arg1', 'Anxa', 'Spp1'))
+```
+
+```{r}
+#trem2 gdf15
+zs(merged4, c('Selenop', 'Psap', 'Gdf15', 'Apoe', 'Fcrls', 'Fabp4'))
+```
+
+```{r}
+#trem2 prdx1
+zs(merged4, c('Prdx1', 'Slc40a1', 'Ftl1', 'Fth1'))
+```
+
+```{r}
+#isg15
+zs(merged4, c('Isg15', 'Rsad2', 'Oasl', 'Cxcl10'))
+```
+
+```{r}
+#fn1 ltc4s
+zs(merged4, c('Fn1', 'Prtn3', 'C4b', 'Ecm1'))
+```
+
+```{r}
+#prolif s
+zs(merged4, c('Mcm2', 'Stmn1', 'Ccnd1'))
+```
+
+```{r}
+#prolif g2m
+zs(merged4, c('Birc5', 'Mki67', 'Top2a'))
+```
+
+```{r}
+#low rna
+zs(merged4, c('Fam71a', 'Gm3336', 'Gm33195'))
+```
+
+```{r}
+png(filename="./merged4 0.9 res.png", width=20, height=20, units="cm", res=300)
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.9")
+dev.off()
+```
+
+```{r}
+png(filename="./merged4 0.9 res condition.png", width=90, height=20, units="cm", res=300)
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.9", split.by = "condition")
+dev.off()
+```
+
+```{r}
+png(filename="./merged4 0.9 res source.png", width=75, height=20, units="cm", res=300)
+DimPlot(merged4, reduction = "umap", label = TRUE, pt.size = 1, group.by = "RNA_snn_res.0.9", split.by = "source")
+dev.off()
+```
+
+```{r}
+png(filename="./merged4 0.9 res NO LABEL.png", width=20, height=20, units="cm", res=300)
+DimPlot(merged4, reduction = "umap", label = FALSE, pt.size = 1, group.by = "RNA_snn_res.0.9")
+dev.off()
+```
+
+```{r}
+png(filename="./merged4 0.9 res condition NO LABEL.png", width=90, height=20, units="cm", res=300)
+DimPlot(merged4, reduction = "umap", label = FALSE, pt.size = 1, group.by = "RNA_snn_res.0.9", split.by = "condition")
+dev.off()
+```
+
+```{r}
+png(filename="./merged4 0.9 res source NO LABEL.png", width=75, height=20, units="cm", res=300)
+DimPlot(merged4, reduction = "umap", label = FALSE, pt.size = 1, group.by = "RNA_snn_res.0.9", split.by = "source")
+dev.off()
+```
+
+```{r}
+DefaultAssay(merged4) <- 'RNA'
+Idents(merged4) <- "RNA_snn_res.0.9"
+rna.markers <- FindAllMarkers(merged4, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged4_res0.9.csv", quote = FALSE)
+```
+
+```{r}
+FeaturePlot(merged4, features = "nCount_RNA")
+FeaturePlot(merged4, features = "nFeature_RNA")
+FeaturePlot(merged4, features = "propmt")
+```
+
+```{r}
+VlnPlot(merged4, features = "nCount_RNA", group.by = "RNA_snn_res.0.9", pt.size = 0)
+```
+
+
+```{r}
+#cdc1 signature
+zs(merged4, c("Ifi205", "Naaa"))
+```
+
+```{r}
+#cdc2 signature
+zs(merged4, c("Napsa", "Cd209a"))
+```
+
+```{r}
+#pdc signature
+zs(merged4, c('Ccr9', 'Siglech'))
+```
+
+#annotation
+```{r}
+Idents(merged4) <- "RNA_snn_res.0.9"
+
+#0 trem2 spp1
+#1 ly6c hi mono
+#2 rtm mhcii
+#3 trem2 gdf15
+#4 trem2 spp1
+#5 rtm timd4
+#6 rtm mhcii
+#7 cdc2
+#8 rtm mhcii
+#9 isg15
+#10 mhcii il1b
+#11 prolif g2m
+#12 ly6c lo mono
+#13 rtm mhcii
+#14 prolif s
+#15 fn1 ltc4s
+#16 cdc2
+
+```
+
+
+```{r}
+FeaturePlot(merged4, features = "Arg1")
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"Trem2hiSpp1"} 
+  else if (x == "1") {"Ly6Chi_mono"}
+  else if (x == "2") {"Res_MHCII"}
+  else if (x == "3") {"Trem2Gdf15"}
+  else if (x == "4") {"Trem2hiSpp1"}
+  else if (x == "5") {"Res_TIMD4"}
+  else if (x == "6") {"Res_MHCII"}
+  else if (x == "7") {"cDC2"}
+  else if (x == "8") {"Res_MHCII"}
+  else if (x == "9") {"Isg15"}
+  else if (x == "10") {"MHCII+IL1B+"}
+  else if (x == "11") {"Prolif_G2M"}
+  else if (x == "12") {"Ly6clow_mono"}
+  else if (x == "13") {"Res_MHCII"}
+  else if (x == "14") {"Prolif_S"}
+  else if (x == "15") {"Fn1/Ltc4s"}
+  else if (x == "16") {"cDC2"}
+}
+merged4$annotation <- mapply(fun, merged4$RNA_snn_res.0.9)
+```
+
+```{r}
+DimPlot(merged4, group.by = "annotation", label = TRUE)
+```
+
+
+#z scores of marker list genes
+```{r}
+#cDC2
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zcDC2 <- c("Napsa", "Cd209a")
+pops<-list(zcDC2)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$cDC2_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "cDC2_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+#Fn1Ltc4s
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zFn1Ltc4s <- c('Fn1', 'Prtn3', 'C4b', 'Ecm1')
+pops<-list(zFn1Ltc4s)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$Fn1Ltc4s_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "Fn1Ltc4s_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+#Isg15
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zIsg15 <- c('Isg15', 'Rsad2', 'Oasl', 'Cxcl10')
+pops<-list(zIsg15)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$Isg15_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "Isg15_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+#ly6chi
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zly6chi <- c('Ly6c2', 'Plac8', 'Chil3')
+pops<-list(zly6chi)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$ly6chi_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "ly6chi_z", group.by = "RNA_snn_res.0.9")
+```
+
+
+```{r}
+#ly6clow
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zly6clow <- c('Ear2', 'Ace', 'Treml4', 'Itgal')
+pops<-list(zly6clow)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$ly6clow_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "ly6clow_z", group.by = "RNA_snn_res.0.9")
+```
+
+
+```{r}
+#mhciiil1b
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zmhciiil1b <- c('Cd72', 'Il1b', 'Tnip3', 'Tlr2', 'Slamf9', 'Ccrl2', 'Ccr2')
+pops<-list(zmhciiil1b)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$mhciiil1b_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "mhciiil1b_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+#g2m
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zg2m <- c('Birc5', 'Mki67', 'Top2a')
+pops<-list(zg2m)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$g2m_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "g2m_z", group.by = "RNA_snn_res.0.9")
+```
+
+
+```{r}
+#prolif_s
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zprolif_s <- c('Mcm2', 'Stmn1', 'Ccnd1')
+pops<-list(zprolif_s)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$prolif_s_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "prolif_s_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+#resmhcii
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zresmhcii <- c('H2-Aa', 'H2-Ab1', 'Cd83', 'Cd81', 'Cd74', 'Atf3', 'Egr1')
+pops<-list(zresmhcii)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$resmhcii_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "resmhcii_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+#restimd4
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+zrestimd4 <- c('Lyve1', 'Folr2', 'Cd163', 'Klf2', 'Cfh', 'Cbr2', 'F13a1')
+pops<-list(zrestimd4)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$restimd4_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "restimd4_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+#trem2gdf15
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+ztrem2gdf15 <- c('Selenop', 'Psap', 'Gdf15', 'Apoe', 'Fcrls', 'Fabp4')
+pops<-list(ztrem2gdf15)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$trem2gdf15_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "trem2gdf15_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+#trem2spp1
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+ztrem2spp1 <- c('Lgals3', 'Ctsd', 'Ctsl', 'Fabp5', 'Gpnmb', 'Arg1', 'Anxa', 'Spp1')
+pops<-list(ztrem2spp1)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$trem2spp1_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "trem2spp1_z", group.by = "RNA_snn_res.0.9")
+```
+
+
+```{r}
+#trem2prdx1
+
+DefaultAssay(merged4) <- "RNA"
+expdata <- GetAssayData(merged4)
+ztrem2prdx1 <- c('Prdx1', 'Slc40a1', 'Ftl1', 'Fth1')
+pops<-list(ztrem2prdx1)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+merged4@meta.data$trem2prdx1_z<-z_scores[1,]
+
+DotPlot(object = merged4, features = "trem2prdx1_z", group.by = "RNA_snn_res.0.9")
+```
+
+```{r}
+png(filename = "./annotation z dot plot res0.9.png", width = 25, height = 20, units = "cm", res = 300)
+DotPlot(object = merged4, features = c('cDC2_z', 'Fn1Ltc4s_z', 'Isg15_z', 'ly6chi_z', 'ly6clow_z', 'mhciiil1b_z', 'g2m_z', 'prolif_s_z', 'resmhcii_z', 'restimd4_z', 'trem2gdf15_z', 'trem2spp1_z'), group.by = "RNA_snn_res.0.9")
+dev.off()
+```
+
+```{r}
+png(filename = "./annotation z dot plot.png", width = 25, height = 20, units = "cm", res = 300)
+DotPlot(object = merged4, features = c('cDC2_z', 'Fn1Ltc4s_z', 'Isg15_z', 'ly6chi_z', 'ly6clow_z', 'mhciiil1b_z', 'g2m_z', 'prolif_s_z', 'resmhcii_z', 'restimd4_z', 'trem2gdf15_z', 'trem2spp1_z'), group.by = "annotation")
+dev.off()
+```
+
+```{r}
+cell.num <- table(merged4@meta.data$annotation)
+cell.num
+```
+
+```{r}
+saveRDS(merged4, "./rizzoint.rds")
+```
+
+
+
+```{r}
+rizzoint <- readRDS('./rizzoint.rds')
+```
+
+  if (x == "0") {"Trem2hiSpp1"} 
+  else if (x == "1") {"Ly6Chi_mono"}
+  else if (x == "2") {"Res_MHCII"}
+  else if (x == "3") {"Trem2Gdf15"}
+  else if (x == "4") {"Trem2hiSpp1"}
+  else if (x == "5") {"Res_TIMD4"}
+  else if (x == "6") {"Res_MHCII"}
+  else if (x == "7") {"cDC2"}
+  else if (x == "8") {"Res_MHCII"}
+  else if (x == "9") {"Isg15"}
+  else if (x == "10") {"MHCII+IL1B+"}
+  else if (x == "11") {"Prolif_G2M"}
+  else if (x == "12") {"Ly6clow_mono"}
+  else if (x == "13") {"Res_MHCII"}
+  else if (x == "14") {"Prolif_S"}
+  else if (x == "15") {"Fn1/Ltc4s"}
+  else if (x == "16") {"cDC2"}
+
+```{r}
+rizzoint$RNA_snn_res.0.9 <- factor(rizzoint$RNA_snn_res.0.9, levels = c('7', '16', '15', '9', '1', '12', '10', '11', '14', '2', '6', '8', '13', '5', '3', '0', '4'))
+```
+
+```{r}
+png(filename = "./annotation z dot plot res0.9.png", width = 25, height = 20, units = "cm", res = 300)
+DotPlot(object = rizzoint, features = c('cDC2_z', 'Fn1Ltc4s_z', 'Isg15_z', 'ly6chi_z', 'ly6clow_z', 'mhciiil1b_z', 'g2m_z', 'prolif_s_z', 'resmhcii_z', 'restimd4_z', 'trem2gdf15_z', 'trem2spp1_z'), group.by = "RNA_snn_res.0.9")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+dev.off()
+```
+
+```{r}
+png(filename = "./annotation z dot plot.png", width = 25, height = 20, units = "cm", res = 300)
+DotPlot(object = rizzoint, features = c('cDC2_z', 'Fn1Ltc4s_z', 'Isg15_z', 'ly6chi_z', 'ly6clow_z', 'mhciiil1b_z', 'g2m_z', 'prolif_s_z', 'resmhcii_z', 'restimd4_z', 'trem2gdf15_z', 'trem2spp1_z'), group.by = "annotation")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+dev.off()
+```
+
+
+```{r}
+rizzoint$annotation <- factor(rizzoint$annotation, levels = c("Res_MHCII", "Trem2hiSpp1", "Ly6Chi_mono", "Trem2Gdf15", "Res_TIMD4", "cDC2", "Isg15", "MHCII+IL1B+", "Prolif_G2M", "Ly6clow_mono", "Prolif_S", "Fn1/Ltc4s"))
+```
+
+
+```{r}
+png(filename = "./rizzo integrated.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(rizzoint, reduction = 'umap', group.by = 'annotation', label.size = 7, label = FALSE, pt.size = 1)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+
+```{r}
+png(filename = "./rizzo integrated condition.png", width = 90, height = 20, units = "cm", res = 300)
+DimPlot(rizzoint, reduction = 'umap', group.by = 'annotation',label.size = 7, label = FALSE, split.by = "condition", pt.size = 1)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+```{r}
+png(filename = "./rizzo integrated source.png", width = 75, height = 20, units = "cm", res = 300)
+DimPlot(rizzoint, reduction = 'umap', group.by = 'annotation',label.size = 7, label = FALSE, split.by = "source", pt.size = 1)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+
+```{r}
+DefaultAssay(rizzoint) <- 'RNA'
+Idents(rizzoint) <- "annotation"
+rna.markers <- FindAllMarkers(rizzoint, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./rizzoint_annotation.csv", quote = FALSE)
+```
+
+
+#mapping machif1ako data to publically available data sets
+```{r}
+myeloid <- readRDS("E:/andrew reclustered no ccrl2 121422/WT_HIF1AKO_mapped.rds")
+```
+
+
+
+#renormalize query the same way reference was
+```{r}
+DefaultAssay(myeloid)<- "RNA"
+myeloid <- NormalizeData(myeloid, verbose = FALSE)
+myeloid <-FindVariableFeatures(myeloid, selection.method = "vst", nfeatures = 2000)
+myeloid <-ScaleData(myeloid,verbose = FALSE) 
+myeloid <-RunPCA(myeloid, verbose = FALSE)
+
+myeloid <- myeloid %>% 
+    RunHarmony("condition", plot_convergence = TRUE)
+myeloid <- myeloid %>% 
+    RunUMAP(reduction = "harmony", dims = 1:20, return.model = TRUE) %>% 
+    FindNeighbors(reduction = "harmony", dims = 1:20) %>% 
+    FindClusters(resolution = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)) %>% 
+    identity()
+```
+
+```{r}
+DimPlot(myeloid, group.by = "predicted.celltype", label = TRUE)
+```
+
+```{r}
+myeloid$predicted.celltype.old <- myeloid$predicted.celltype
+```
+
+```{r}
+DimPlot(myeloid, group.by = "predicted.celltype.old", label = TRUE)
+```
+
+#spca of reference
+```{r}
+rizzoint <- RunSPCA(rizzoint, assay = 'RNA', graph = 'RNA_snn')
+DimPlot(rizzoint, reduction = "umap", label = TRUE)
+```
+
+```{r}
+anchors <- FindTransferAnchors(
+  reference = rizzoint,
+  query = myeloid,
+  normalization.method = "LogNormalize",
+  reference.reduction = "spca",
+  reference.assay = "RNA",
+  dims = 1:40
+)
+```
+
+```{r}
+mapped <- MapQuery(
+  anchorset = anchors,
+  query = myeloid,
+  reference = rizzoint,
+  refdata = list(
+    celltype = "annotation"
+  ),
+  reference.reduction = "spca",
+  reduction.model = "umap"
+)
+```
+
+
+```{r}
+DimPlot(mapped, reduction = "ref.umap", group.by = "predicted.celltype", label = TRUE)
+DimPlot(mapped, reduction = "ref.umap", group.by = "predicted.celltype.old", label = TRUE)
+```
+
+```{r}
+mapped$predicted.celltype <- factor(mapped$predicted.celltype, levels = c("Res_MHCII", "Trem2hiSpp1", "Ly6Chi_mono", "Trem2Gdf15", "Res_TIMD4", "cDC2", "Isg15", "MHCII+IL1B+", "Prolif_G2M", "Ly6clow_mono", "Prolif_S", "Fn1/Ltc4s"))
+```
+
+```{r}
+png(filename = "./mapped predicted.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(mapped, reduction = 'ref.umap', group.by = 'predicted.celltype', label.size = 7, label = FALSE, pt.size = 2)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+```{r}
+mapped$predicted.celltype.old <- factor(mapped$predicted.celltype.old, levels = c("Res", "Trem2", "Mono", "Gdf15", "cDC2", "IFN", "MHCII", "Prolif", "Arg1", "Ccl8"))
+```
+
+```{r}
+png(filename = "./mapped old.png", width = 25, height = 20, units = "cm", res = 300)
+DimPlot(mapped, reduction = 'ref.umap', group.by = 'predicted.celltype.old', label.size = 7, label = FALSE, pt.size = 2)+ coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+
+```{r}
+write.csv(mapped@meta.data, file = "./mapped_meta.csv", quote = TRUE)
+
+mappedmeta <- mapped@meta.data
+```
+
+
+
+#stacked barplot of mapping
+```{r}
+png(filename="./stacked barplot of mapping.png", width=100, height=20, units="cm", res=600)
+ggplot(mappedmeta, aes(x = predicted.celltype, fill = predicted.celltype.old)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+dev.off()
+```
+
+```{r}
+png(filename="./stacked barplot of mapping 2.png", width=100, height=20, units="cm", res=600)
+ggplot(mappedmeta, aes(x = predicted.celltype.old, fill = predicted.celltype)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+dev.off()
+```
+
+
+
+```{r}
+png(filename="./arg1z integrated violin plot.png", width=15, height=10, units="cm", res=300)
+VlnPlot(rizzoint_2, features = "arg1_z", group.by = "condition", pt.size = 0)
+dev.off()
+```
+
+
+
+```{r}
+png(filename="./arg1 expression integrated violin plot.png", width=15, height=10, units="cm", res=300)
+VlnPlot(rizzoint_2, features = "Arg1", group.by = "condition", pt.size = 0)
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
