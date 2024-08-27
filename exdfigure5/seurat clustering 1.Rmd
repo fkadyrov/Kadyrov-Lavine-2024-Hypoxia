@@ -1,0 +1,349 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("E:/reshif1 snseq")
+
+#wt1
+wt1_dir <- './RESWT1/outs/filtered_feature_bc_matrix'
+wt1.data <- Read10X(data.dir =wt1_dir)
+WT1 <- CreateSeuratObject(counts = wt1.data, min.cells = 3, min.features = 200)
+WT1$condition <- "WT1"
+WT1$genotype <- "WT"
+
+#wt2
+wt2_dir <- './RESWT2/outs/filtered_feature_bc_matrix'
+wt2.data <- Read10X(data.dir =wt2_dir)
+WT2 <- CreateSeuratObject(counts = wt2.data, min.cells = 3, min.features = 200)
+WT2$condition <- "WT2"
+WT2$genotype <- "WT"
+
+#ko1
+ko1_dir <- './RESHIF1/outs/filtered_feature_bc_matrix'
+ko1.data <- Read10X(data.dir =ko1_dir)
+KO1 <- CreateSeuratObject(counts = ko1.data, min.cells = 3, min.features = 200)
+KO1$condition <- "KO1"
+KO1$genotype <- "KO"
+
+#ko2
+ko2_dir <- './RESHIF2/outs/filtered_feature_bc_matrix'
+ko2.data <- Read10X(data.dir =ko2_dir)
+KO2 <- CreateSeuratObject(counts = ko2.data, min.cells = 3, min.features = 200)
+KO2$condition <- "KO2"
+KO2$genotype <- "KO"
+
+merged <- merge(WT1, y = c(WT2, KO1, KO2))
+```
+#QC
+```{r}
+merged[["propmt"]] <- PercentageFeatureSet(merged, pattern = "^mt-")
+```
+
+```{r}
+png(filename="./pre qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged, features = c("nFeature_RNA", "nCount_RNA", "propmt"), ncol = 3, pt.size=0)
+dev.off()
+```
+
+```{r}
+merged
+```
+
+```{r}
+
+merged2 <- subset(merged, subset = nCount_RNA > 1000 & nCount_RNA < 10000 & propmt < 5)
+
+```
+
+```{r}
+merged2
+```
+
+```{r}
+png(filename="./qc violin plot.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged2, features = c("nFeature_RNA", "nCount_RNA", "propmt"), group.by = "orig.ident", ncol = 3, pt.size=0)
+dev.off()
+```
+
+```{r}
+SaveH5Seurat(merged2, filename = "./merged_postQC.h5Seurat")
+```
+
+```{r}
+Convert("./merged_postQC.h5Seurat", dest = "h5ad")
+```
+
+
+```{r}
+#scrublet at this point
+```
+
+```{r}
+#### Load in doublet output
+scrub = read.csv('./scrublet-scores/all.csv',header=T,row.names=1)
+```
+
+```{r}
+merged2@meta.data$scrublet_score = scrub$scrublet_score
+merged2@meta.data$scrublet_cluster_score = scrub$scrublet_cluster_score
+merged2@meta.data$bh_pval = scrub$bh_pval
+```
+
+```{r}
+png(filename="./scrublet scores pre filter.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged2, group.by = "condition", features = "scrublet_score", pt.size = 0) + NoLegend()
+dev.off()
+```
+
+```{r}
+merged2
+```
+
+```{r}
+merged3 <- subset(
+  x = merged2,
+  subset = scrublet_score < 0.25
+)
+```
+
+```{r}
+merged3
+```
+
+#scrublet removed 935 cells
+
+```{r}
+png(filename="./scrublet scores post filter.png", width=18, height=10, units="cm", res=300)
+VlnPlot(merged3, group.by = "condition", features = "scrublet_score", pt.size = 0) + NoLegend()
+dev.off()
+```
+
+
+
+```{r}
+saveRDS(merged3, "./merged3_postQC_doubletRemoval.rds")
+merged3 <- readRDS("merged3_postQC_doubletRemoval.rds")
+```
+
+
+
+
+#SCT transform and filter
+```{r}
+DefaultAssay(merged3) <- 'RNA'
+merged3 <- SCTransform(merged3, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+merged3 <- RunPCA(merged3, features = VariableFeatures(object = merged3), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(merged3, ndims = 50)
+```
+
+```{r}
+merged3 <- RunUMAP(merged3, reduction = "pca", dims = 1:40)
+merged3 <- FindNeighbors(merged3, reduction = "pca", dims = 1:40)
+merged3 <- FindClusters(merged3, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(merged3, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(merged3, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(merged3, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(merged3, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(merged3, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(merged3, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(merged3, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(merged3, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(merged3, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+DimPlot(merged3, group.by = "SCT_snn_res.0.9", label = TRUE, split.by = "condition")
+DimPlot(merged3, group.by = "SCT_snn_res.0.9", label = TRUE, split.by = "genotype")
+```
+
+```{r}
+png(filename="./merged3 09 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(merged3, group.by = "SCT_snn_res.0.9", label = TRUE)
+dev.off()
+
+png(filename="./merged3 09 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(merged3, group.by = "SCT_snn_res.0.9", label = FALSE)
+dev.off()
+
+saveRDS(merged3, "./merged3_postclustering.rds")
+merged3 <- readRDS("./merged3_postclustering.rds")
+```
+
+
+```{r}
+DefaultAssay(merged3) <- 'SCT'
+Idents(merged3) <- "SCT_snn_res.0.9"
+rna.markers <- FindAllMarkers(merged3, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./merged3_DGE_GEX_res0.9.csv", quote = FALSE)
+```
+
+```{r}
+FeaturePlot(merged3, features = "nFeature_RNA")
+FeaturePlot(merged3, features = "nCount_RNA")
+FeaturePlot(merged3, features = "propmt")
+
+VlnPlot(merged3, features = "nFeature_RNA", group.by = 'SCT_snn_res.0.9')
+VlnPlot(merged3, features = "nCount_RNA", group.by = 'SCT_snn_res.0.9')
+VlnPlot(merged3, features = "propmt", group.by = 'SCT_snn_res.0.9')
+```
+
+
+```{r}
+FeaturePlot(merged3, features = "Cd8a")
+FeaturePlot(merged3, features = "Itgam")
+FeaturePlot(merged3, features = "Dcn")
+FeaturePlot(merged3, features = "Postn")
+FeaturePlot(merged3, features = "Trem2")
+FeaturePlot(merged3, features = "Tnnt2")
+FeaturePlot(merged3, features = "Wt1")
+FeaturePlot(merged3, features = "Kit")
+FeaturePlot(merged3, features = "Rgs5")
+FeaturePlot(merged3, features = "Plin1")
+FeaturePlot(merged3, features = "Lyve1")
+FeaturePlot(merged3, features = "Myh11")
+FeaturePlot(merged3, features = "Vwf")
+```
+
+#annotate
+
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"endothelial"} 
+  else if (x == "1") {"junk"}
+  else if (x == "2") {"myeloid"}
+  else if (x == "3") {"fibroblast"}
+  else if (x == "4") {"myeloid"}
+  else if (x == "5") {"fibroblast"}
+  else if (x == "6") {"myeloid"}
+  else if (x == "7") {"neutrophil"}
+  else if (x == "8") {"neutrophil"}
+  else if (x == "9") {"myeloid"}
+  else if (x == "10") {"endocardium"}
+  else if (x == "11") {"myeloid"}
+  else if (x == "12") {"endocardium"}
+  else if (x == "13") {"pericytes"}
+  else if (x == "14") {"epicardium"}
+  else if (x == "15") {"fibroblast"}
+  else if (x == "16") {"cardiomyocyte"}
+  else if (x == "17") {"endocardium"} 
+  else if (x == "18") {"nkt"}
+  else if (x == "19") {"lymphatic"}
+  else if (x == "20") {"myeloid"}
+  else if (x == "21") {"bcell"}
+  else if (x == "22") {"neutrophil"}
+  else if (x == "23") {"myeloid"}
+  else if (x == "24") {"myeloid"}
+  else if (x == "25") {"fibroblast"}
+  else if (x == "26") {"junk"}
+  else if (x == "27") {"lung"}
+  else if (x == "28") {"fibroblast"}
+  else if (x == "29") {"cardiomyocyte"}
+  else if (x == "30") {"endothelial"}
+  else if (x == "31") {"smc"}
+  else if (x == "32") {"adipocyte"}
+  else if (x == "33") {"nkt"}
+  else if (x == "34") {"junk"}
+  else if (x == "35") {"myeloid"}
+  else if (x == "36") {"pdc"}
+  else if (x == "37") {"neuron"}
+}
+merged3$annotation <- mapply(fun, merged3$SCT_snn_res.0.9)
+```
+
+```{r}
+png(filename = "./merged 3 annotation.png", width = 25, height = 20, units = "cm", res = 600)
+DimPlot(merged3, reduction = 'umap', group.by = 'annotation', label.size = 7, label = FALSE, pt.size = 1)+
+  theme(legend.text=element_text(size=10))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","black","#b66dff","#6db6ff","yellow2","#ffb6db","#b6dbff","red", 'darkblue', "green4", "coral"))
+dev.off()
+```
+
+#seperate out more complicated populations for additional cleaning and annotation. lung cells will be removed
+```{r}
+DefaultAssay(merged3) <- 'SCT'
+Idents(merged3) <- "annotation"
+
+#these populations will have no additional annotation/cleaning
+other <- subset(merged3, idents = c('adipocyte', 'bcell', 'lymphatic', 'neuron', 'neutrophil', 'pdc'))
+
+#more complicated objects
+cardiomyocyte <- subset(merged3, idents = c('cardiomyocyte', 'epicardium'))
+endothelial <- subset(merged3, idents = c('endocardium', 'endothelial'))
+fibroblast <- subset(merged3, idents = c('fibroblast'))
+myeloid <- subset(merged3, idents = c('myeloid'))
+nkt <- subset(merged3, idents = c('nkt'))
+smc <- subset(merged3, idents = c('pericytes', 'smc'))
+```
+
+```{r}
+saveRDS(other, "./cleaning step 2/other.rds")
+rm(other)
+gc()
+
+saveRDS(cardiomyocyte, "./cleaning step 2/cardiomyocyte.rds")
+rm(cardiomyocyte)
+gc()
+
+saveRDS(endothelial, "./cleaning step 2/endothelial.rds")
+rm(endothelial)
+gc()
+
+saveRDS(fibroblast, "./cleaning step 2/fibroblast.rds")
+rm(fibroblast)
+gc()
+
+saveRDS(myeloid, "./cleaning step 2/myeloid.rds")
+rm(myeloid)
+gc()
+
+saveRDS(smc, "./cleaning step 2/smc.rds")
+rm(smc)
+gc()
+
+saveRDS(nkt, "./cleaning step 2/nkt.rds")
+rm(nkt)
+gc()
+```
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,264 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("E:/reshif1 snseq/cleaning step 2/clean fibroblast")
+```
+
+```{r}
+fibroblast <- readRDS("E:/reshif1 snseq/cleaning step 2/fibroblast.rds")
+```
+
+#SCT transform and filter
+```{r}
+DefaultAssay(fibroblast) <- 'RNA'
+fibroblast <- SCTransform(fibroblast, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+fibroblast <- RunPCA(fibroblast, features = VariableFeatures(object = fibroblast), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(fibroblast, ndims = 50)
+```
+
+```{r}
+fibroblast <- RunUMAP(fibroblast, reduction = "pca", dims = 1:40)
+fibroblast <- FindNeighbors(fibroblast, reduction = "pca", dims = 1:40)
+fibroblast <- FindClusters(fibroblast, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(fibroblast, features = "Col1a1")
+FeaturePlot(fibroblast, features = "Dcn")
+FeaturePlot(fibroblast, features = "Itgam")
+FeaturePlot(fibroblast, features = "Siglece")
+FeaturePlot(fibroblast, features = "Klrc1")
+FeaturePlot(fibroblast, features = "Bank1")
+FeaturePlot(fibroblast, features = "Cd8a")
+FeaturePlot(fibroblast, features = "Il7r")
+FeaturePlot(fibroblast, features = "Kit")
+FeaturePlot(fibroblast, features = "Ttn")
+FeaturePlot(fibroblast, features = "Tnnt2")
+FeaturePlot(fibroblast, features = "Nppa")
+FeaturePlot(fibroblast, features = "Nppb")
+FeaturePlot(fibroblast, features = "Fap")
+FeaturePlot(fibroblast, features = "Postn")
+FeaturePlot(fibroblast, features = "Wt1")
+FeaturePlot(fibroblast, features = "Acta1")
+```
+
+
+```{r}
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.8", label = TRUE, split.by = "condition")
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.8", label = TRUE, split.by = "genotype")
+```
+
+```{r}
+png(filename="./fibroblast 08 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.8", label = TRUE)
+dev.off()
+
+png(filename="./fibroblast 08 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(fibroblast, group.by = "SCT_snn_res.0.8", label = FALSE)
+dev.off()
+
+saveRDS(fibroblast, "./fibroblast_postclustering.rds")
+fibroblast <- readRDS("./fibroblast_postclustering.rds")
+```
+
+
+```{r}
+DefaultAssay(fibroblast) <- 'SCT'
+Idents(fibroblast) <- "SCT_snn_res.0.8"
+rna.markers <- FindAllMarkers(fibroblast, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./fibroblast_DGE_GEX_res0.8.csv", quote = FALSE)
+```
+
+
+
+```{r}
+FeaturePlot(fibroblast, features = "propmt", split.by = "genotype", pt.size = 1)
+FeaturePlot(fibroblast, features = "nCount_RNA", split.by = "genotype", pt.size = 1)
+FeaturePlot(fibroblast, features = "nFeature_RNA", split.by = "genotype", pt.size = 1)
+```
+
+#annotate
+```{r}
+fun <- function(x) {
+  if (x == "0") {"fibroblast"} 
+  else if (x == "1") {"fibroblast"}
+  else if (x == "2") {"fibroblast"}
+  else if (x == "3") {"junk"}
+  else if (x == "4") {"junk"}
+  else if (x == "5") {"fibroblast"}
+  else if (x == "6") {"junk"}
+  else if (x == "7") {"fibroblast"}
+  else if (x == "8") {"junk"}
+  else if (x == "9") {"fibroblast"}
+  else if (x == "10") {"junk"}
+  else if (x == "11") {"junk"}
+  else if (x == "12") {"junk"}
+  else if (x == "13") {"fibroblast"}
+  else if (x == "14") {"junk"}
+  else if (x == "15") {"junk"}
+  else if (x == "16") {"junk"}
+  else if (x == "17") {"junk"}
+  else if (x == "18") {"junk"}
+}
+fibroblast$sub.type <- mapply(fun, fibroblast$SCT_snn_res.0.8)
+```
+
+
+```{r}
+png(filename="./fibroblast annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(fibroblast, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+#clean reclustered object
+```{r}
+DefaultAssay(fibroblast) <- 'SCT'
+Idents(fibroblast) <- "sub.type"
+
+clean_fibroblast <- subset(fibroblast, idents = c('fibroblast'))
+```
+
+
+
+```{r}
+DefaultAssay(clean_fibroblast) <- 'RNA'
+clean_fibroblast <- SCTransform(clean_fibroblast, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+clean_fibroblast <- RunPCA(clean_fibroblast, features = VariableFeatures(object = clean_fibroblast), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(clean_fibroblast, ndims = 50)
+```
+
+```{r}
+clean_fibroblast <- RunUMAP(clean_fibroblast, reduction = "pca", dims = 1:40)
+clean_fibroblast <- FindNeighbors(clean_fibroblast, reduction = "pca", dims = 1:40)
+clean_fibroblast <- FindClusters(clean_fibroblast, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(clean_fibroblast, features = "Col1a1")
+FeaturePlot(clean_fibroblast, features = "Dcn")
+FeaturePlot(clean_fibroblast, features = "Itgam")
+FeaturePlot(clean_fibroblast, features = "Siglece")
+FeaturePlot(clean_fibroblast, features = "Klrc1")
+FeaturePlot(clean_fibroblast, features = "Bank1")
+FeaturePlot(clean_fibroblast, features = "F13a1")
+FeaturePlot(clean_fibroblast, features = "Il7r")
+FeaturePlot(clean_fibroblast, features = "Kit")
+FeaturePlot(clean_fibroblast, features = "Ttn")
+FeaturePlot(clean_fibroblast, features = "Tnnt2")
+FeaturePlot(clean_fibroblast, features = "Nppa")
+FeaturePlot(clean_fibroblast, features = "Nppb")
+FeaturePlot(clean_fibroblast, features = "Fap")
+FeaturePlot(clean_fibroblast, features = "Postn")
+FeaturePlot(clean_fibroblast, features = "Wt1")
+```
+
+```{r}
+DefaultAssay(clean_fibroblast) <- 'SCT'
+Idents(clean_fibroblast) <- "SCT_snn_res.0.3"
+rna.markers <- FindAllMarkers(clean_fibroblast, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./clean_fibroblast_DGE_GEX_res0.3.csv", quote = FALSE)
+```
+
+```{r}
+png(filename="./clean_fibroblast 03 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.3", label = TRUE)
+dev.off()
+
+png(filename="./clean_fibroblast 03 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_fibroblast, group.by = "SCT_snn_res.0.3", label = FALSE)
+dev.off()
+```
+
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"fibroblast"} 
+  else if (x == "1") {"fibroblast"}
+  else if (x == "2") {"fibroblast"}
+  else if (x == "3") {"fibroblast"}
+  else if (x == "4") {"fibroblast"}
+}
+clean_fibroblast$sub.type <- mapply(fun, clean_fibroblast$SCT_snn_res.0.3)
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"fibroblast"} 
+  else if (x == "1") {"fibroblast"}
+  else if (x == "2") {"fibroblast"}
+  else if (x == "3") {"fibroblast"}
+  else if (x == "4") {"fibroblast"}
+}
+clean_fibroblast$global.type <- mapply(fun, clean_fibroblast$SCT_snn_res.0.3)
+```
+
+```{r}
+png(filename="./clean_fibroblast annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_fibroblast, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+```{r}
+saveRDS(clean_fibroblast, "./clean_fibroblast.rds")
+```
+
+
+

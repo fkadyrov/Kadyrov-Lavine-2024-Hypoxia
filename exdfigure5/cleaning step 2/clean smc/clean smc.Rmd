@@ -1,0 +1,251 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("E:/reshif1 snseq/cleaning step 2/clean smc")
+```
+
+```{r}
+smc <- readRDS("E:/reshif1 snseq/cleaning step 2/smc.rds")
+```
+
+#SCT transform and filter
+```{r}
+DefaultAssay(smc) <- 'RNA'
+smc <- SCTransform(smc, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+smc <- RunPCA(smc, features = VariableFeatures(object = smc), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(smc, ndims = 50)
+```
+
+```{r}
+smc <- RunUMAP(smc, reduction = "pca", dims = 1:40)
+smc <- FindNeighbors(smc, reduction = "pca", dims = 1:40)
+smc <- FindClusters(smc, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(smc, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(smc, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(smc, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(smc, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(smc, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(smc, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(smc, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(smc, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(smc, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(smc, features = "Vwf")
+FeaturePlot(smc, features = "Npr3")
+FeaturePlot(smc, features = "Bank1")
+FeaturePlot(smc, features = "F13a1")
+FeaturePlot(smc, features = "Col4a1")
+FeaturePlot(smc, features = "Dcn")
+FeaturePlot(smc, features = "Tnnt2")
+FeaturePlot(smc, features = "Col1a1")
+FeaturePlot(smc, features = "Sparc")
+FeaturePlot(smc, features = "Ttn")
+FeaturePlot(smc, features = "Nampt")
+FeaturePlot(smc, features = "Itgam")
+FeaturePlot(smc, features = "Siglece")
+FeaturePlot(smc, features = "Slc26a11")
+FeaturePlot(smc, features = "Rgs5")
+FeaturePlot(smc, features = "Myh11")
+```
+
+
+```{r}
+DimPlot(smc, group.by = "SCT_snn_res.0.4", label = TRUE, split.by = "condition")
+DimPlot(smc, group.by = "SCT_snn_res.0.4", label = TRUE, split.by = "genotype")
+```
+
+```{r}
+png(filename="./smc 04 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(smc, group.by = "SCT_snn_res.0.4", label = TRUE)
+dev.off()
+
+png(filename="./smc 04 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(smc, group.by = "SCT_snn_res.0.4", label = FALSE)
+dev.off()
+
+saveRDS(smc, "./smc_postclustering.rds")
+smc <- readRDS("./smc_postclustering.rds")
+```
+
+
+```{r}
+DefaultAssay(smc) <- 'SCT'
+Idents(smc) <- "SCT_snn_res.0.4"
+rna.markers <- FindAllMarkers(smc, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./smc_DGE_GEX_res0.4.csv", quote = FALSE)
+```
+
+
+
+```{r}
+FeaturePlot(smc, features = "propmt", split.by = "genotype", pt.size = 1)
+FeaturePlot(smc, features = "nCount_RNA", split.by = "genotype", pt.size = 1)
+FeaturePlot(smc, features = "nFeature_RNA", split.by = "genotype", pt.size = 1)
+```
+
+#annotate
+```{r}
+fun <- function(x) {
+  if (x == "0") {"Pericyte"} 
+  else if (x == "1") {"Pericyte"}
+  else if (x == "2") {"Pericyte"}
+  else if (x == "3") {"SMC"}
+  else if (x == "4") {"junk"}
+  else if (x == "5") {"junk"}
+}
+smc$sub.type <- mapply(fun, smc$SCT_snn_res.0.4)
+```
+
+
+
+```{r}
+png(filename="./smc annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(smc, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+#clean reclustered object
+```{r}
+DefaultAssay(smc) <- 'SCT'
+Idents(smc) <- "sub.type"
+
+clean_smc <- subset(smc, idents = c('Pericyte', 'SMC'))
+```
+
+
+
+```{r}
+DefaultAssay(clean_smc) <- 'RNA'
+clean_smc <- SCTransform(clean_smc, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+clean_smc <- RunPCA(clean_smc, features = VariableFeatures(object = clean_smc), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(clean_smc, ndims = 50)
+```
+
+```{r}
+clean_smc <- RunUMAP(clean_smc, reduction = "pca", dims = 1:40)
+clean_smc <- FindNeighbors(clean_smc, reduction = "pca", dims = 1:40)
+clean_smc <- FindClusters(clean_smc, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(clean_smc, features = "Col1a1")
+FeaturePlot(clean_smc, features = "Dcn")
+FeaturePlot(clean_smc, features = "Itgam")
+FeaturePlot(clean_smc, features = "Siglece")
+FeaturePlot(clean_smc, features = "Klrc1")
+FeaturePlot(clean_smc, features = "Bank1")
+FeaturePlot(clean_smc, features = "F13a1")
+FeaturePlot(clean_smc, features = "Il7r")
+FeaturePlot(clean_smc, features = "Kit")
+FeaturePlot(clean_smc, features = "Ttn")
+FeaturePlot(clean_smc, features = "Tnnt2")
+FeaturePlot(clean_smc, features = "Nppa")
+FeaturePlot(clean_smc, features = "Nppb")
+FeaturePlot(clean_smc, features = "Fap")
+FeaturePlot(clean_smc, features = "Postn")
+FeaturePlot(clean_smc, features = "Wt1")
+FeaturePlot(clean_smc, features = "Myh11")
+FeaturePlot(clean_smc, features = "Rgs5")
+```
+
+```{r}
+DefaultAssay(clean_smc) <- 'SCT'
+Idents(clean_smc) <- "SCT_snn_res.0.2"
+rna.markers <- FindAllMarkers(clean_smc, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./clean_smc_DGE_GEX_res0.2.csv", quote = FALSE)
+```
+
+```{r}
+png(filename="./clean_smc 02 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.2", label = TRUE)
+dev.off()
+
+png(filename="./clean_smc 02 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_smc, group.by = "SCT_snn_res.0.2", label = FALSE)
+dev.off()
+```
+
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"pericyte"} 
+  else if (x == "1") {"pericyte"}
+  else if (x == "2") {"pericyte"}
+  else if (x == "3") {"smc"}
+}
+clean_smc$sub.type <- mapply(fun, clean_smc$SCT_snn_res.0.2)
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"pericyte"} 
+  else if (x == "1") {"pericyte"}
+  else if (x == "2") {"pericyte"}
+  else if (x == "3") {"smc"}
+}
+clean_smc$global.type <- mapply(fun, clean_smc$SCT_snn_res.0.2)
+```
+
+```{r}
+png(filename="./clean_smc annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_smc, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+```{r}
+saveRDS(clean_smc, "./clean_smc.rds")
+```
+
+
+

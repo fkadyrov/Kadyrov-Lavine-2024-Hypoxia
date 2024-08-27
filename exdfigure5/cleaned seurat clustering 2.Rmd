@@ -1,0 +1,165 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("E:/reshif1 snseq/cleaned global object")
+```
+
+```{r}
+other <- readRDS("E:/reshif1 snseq/cleaning step 2/other.rds")
+cardiomyocyte <- readRDS("E:/reshif1 snseq/cleaning step 2/clean cardiomyocyte/clean_cardiomyocyte.rds")
+endothelial <- readRDS("E:/reshif1 snseq/cleaning step 2/clean endothelial/clean_endothelial.rds")
+fibroblast <- readRDS("E:/reshif1 snseq/cleaning step 2/clean fibroblast/clean_fibroblast.rds")
+myeloid <- readRDS("E:/reshif1 snseq/cleaning step 2/clean myeloid/clean_myeloid.rds")
+smc <- readRDS("E:/reshif1 snseq/cleaning step 2/clean smc/clean_smc.rds")
+nkt <- readRDS("E:/reshif1 snseq/cleaning step 2/clean nkt/clean_nkt.rds")
+```
+
+```{r}
+DimPlot(other, group.by = "annotation")
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "adipocyte") {"adipocyte"} 
+  else if (x == "bcell") {"bcell"}
+  else if (x == "lymphatic") {"lymphatic"}
+  else if (x == "neuron") {"neuron"}
+  else if (x == "neutrophil") {"neutrophil"}
+  else if (x == "pdc") {"pdc"}
+}
+other$global.type <- mapply(fun, other$annotation)
+```
+
+```{r}
+DimPlot(other, group.by = "global.type")
+```
+
+```{r}
+merged <- merge(other, y = c(cardiomyocyte, endothelial, fibroblast, myeloid, smc, nkt))
+```
+
+```{r}
+rm(other)
+rm(cardiomyocyte)
+rm(endothelial)
+rm(fibroblast)
+rm(myeloid)
+rm(smc)
+rm(nkt)
+gc()
+```
+
+
+#SCT transform and filter
+```{r}
+DefaultAssay(merged) <- 'RNA'
+merged <- SCTransform(merged, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+merged <- RunPCA(merged, features = VariableFeatures(object = merged), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(merged, ndims = 50)
+```
+
+```{r}
+merged <- RunUMAP(merged, reduction = "pca", dims = 1:40)
+merged <- FindNeighbors(merged, reduction = "pca", dims = 1:40)
+merged <- FindClusters(merged, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(merged, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(merged, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(merged, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(merged, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(merged, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(merged, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(merged, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(merged, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(merged, group.by = "SCT_snn_res.0.9", label = TRUE)
+DimPlot(merged, group.by = "global.type", label = TRUE)
+```
+
+
+
+
+
+```{r}
+saveRDS(merged, file = "./cleaned_annotated.rds")
+merged <- readRDS("./cleaned_annotated.rds")
+```
+
+```{r}
+count <- as.data.frame(table(merged@meta.data$global.type, merged@meta.data$genotype))
+```
+
+```{r}
+merged$global.type <- factor(x = merged$global.type, levels = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'resident_mac', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'))
+
+merged$genotype <- factor(x = merged$genotype, levels = c("WT", "KO"))
+```
+
+
+#plot of annotations
+```{r}
+
+png(filename="./clean  annotations.png", width=25, height=20, units="cm", res=600)
+DimPlot(merged, reduction = "umap", label = FALSE, group.by = "global.type", pt.size = 1) + coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900", "red", "blue"))
+dev.off()
+
+png(filename="./clean  annotations label.png", width=25, height=20, units="cm", res=600)
+DimPlot(merged, reduction = "umap", label = TRUE, group.by = "global.type", pt.size = 1) + coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900", "red", "blue"))
+dev.off()
+
+png(filename="./clean annotations split.png", width=40, height=20, units="cm", res=600)
+DimPlot(merged, reduction = "umap", label = FALSE, group.by = "global.type", pt.size = 1, split.by = "genotype") + coord_fixed() +
+  theme(legend.text=element_text(size=25))+
+  scale_color_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900", "red", "blue"))
+dev.off()
+```
+
+#stacked barplot of annotations 
+```{r}
+png(filename="./stacked barplot clean annotations.png", width=40, height=20, units="cm", res=600)
+ggplot(merged@meta.data, aes(x = genotype, fill = global.type)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#004949","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#b66dff","#6db6ff","#ffff6d","#ffb6db","#b6dbff","#924900", "red", "blue"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```

@@ -1,0 +1,223 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("D:/reshif1 snseq/cleaning step 2/clean cardiomyocyte")
+```
+
+```{r}
+cardiomyocyte <- readRDS("D:/reshif1 snseq/cleaning step 2/cardiomyocyte.rds")
+```
+
+```{r}
+DimPlot(cardiomyocyte, group.by = "annotation")
+```
+
+
+#SCT transform and filter
+```{r}
+DefaultAssay(cardiomyocyte) <- 'RNA'
+cardiomyocyte <- SCTransform(cardiomyocyte, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+cardiomyocyte <- RunPCA(cardiomyocyte, features = VariableFeatures(object = cardiomyocyte), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(cardiomyocyte, ndims = 50)
+```
+
+```{r}
+cardiomyocyte <- RunUMAP(cardiomyocyte, reduction = "pca", dims = 1:40)
+cardiomyocyte <- FindNeighbors(cardiomyocyte, reduction = "pca", dims = 1:40)
+cardiomyocyte <- FindClusters(cardiomyocyte, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(cardiomyocyte, features = "Wt1")
+FeaturePlot(cardiomyocyte, features = "Tnnt2")
+FeaturePlot(cardiomyocyte, features = "Postn")
+FeaturePlot(cardiomyocyte, features = "Col1a1")
+FeaturePlot(cardiomyocyte, features = "F13a1")
+```
+
+
+```{r}
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.2", label = TRUE, split.by = "condition")
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.2", label = TRUE, split.by = "genotype")
+```
+
+```{r}
+png(filename="./cardiomyocyte 02 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.2", label = TRUE)
+dev.off()
+
+png(filename="./cardiomyocyte 02 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(cardiomyocyte, group.by = "SCT_snn_res.0.2", label = FALSE)
+dev.off()
+
+saveRDS(cardiomyocyte, "./cardiomyocyte_postclustering.rds")
+cardiomyocyte <- readRDS("./cardiomyocyte_postclustering.rds")
+```
+
+
+```{r}
+DefaultAssay(cardiomyocyte) <- 'SCT'
+Idents(cardiomyocyte) <- "SCT_snn_res.0.2"
+rna.markers <- FindAllMarkers(cardiomyocyte, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./cardiomyocyte_DGE_GEX_res0.2.csv", quote = FALSE)
+```
+
+
+
+```{r}
+FeaturePlot(cardiomyocyte, features = "propmt", split.by = "genotype", pt.size = 1)
+FeaturePlot(cardiomyocyte, features = "nCount_RNA", split.by = "genotype", pt.size = 1)
+FeaturePlot(cardiomyocyte, features = "nFeature_RNA", split.by = "genotype", pt.size = 1)
+```
+
+#annotate
+```{r}
+#0 epicardium
+#1 cardiomyocyte
+#2 junk
+#3 macrophage junk
+#4 epicardium
+#5 macrophage junk
+#6 fibroblast junk
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"epicardium"} 
+  else if (x == "1") {"cardiomyocyte"}
+  else if (x == "2") {"junk"}
+  else if (x == "3") {"junk"}
+  else if (x == "4") {"epicardium"}
+  else if (x == "5") {"junk"}
+  else if (x == "6") {"junk"}
+}
+cardiomyocyte$sub.type <- mapply(fun, cardiomyocyte$SCT_snn_res.0.2)
+```
+
+```{r}
+png(filename="./cardiomyocyte annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(cardiomyocyte, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+#clean reclustered object
+```{r}
+DefaultAssay(cardiomyocyte) <- 'SCT'
+Idents(cardiomyocyte) <- "sub.type"
+
+clean_cardiomyocyte <- subset(cardiomyocyte, idents = c('cardiomyocyte', 'epicardium'))
+```
+
+
+
+```{r}
+DefaultAssay(clean_cardiomyocyte) <- 'RNA'
+clean_cardiomyocyte <- SCTransform(clean_cardiomyocyte, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+clean_cardiomyocyte <- RunPCA(clean_cardiomyocyte, features = VariableFeatures(object = clean_cardiomyocyte), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(clean_cardiomyocyte, ndims = 50)
+```
+
+```{r}
+clean_cardiomyocyte <- RunUMAP(clean_cardiomyocyte, reduction = "pca", dims = 1:40)
+clean_cardiomyocyte <- FindNeighbors(clean_cardiomyocyte, reduction = "pca", dims = 1:40)
+clean_cardiomyocyte <- FindClusters(clean_cardiomyocyte, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(clean_cardiomyocyte, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(clean_cardiomyocyte, features = "Wt1")
+FeaturePlot(clean_cardiomyocyte, features = "Tnnt2")
+```
+
+```{r}
+DefaultAssay(clean_cardiomyocyte) <- 'SCT'
+Idents(clean_cardiomyocyte) <- "SCT_snn_res.0.1"
+rna.markers <- FindAllMarkers(clean_cardiomyocyte, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./clean_cardiomyocyte_DGE_GEX_res0.1.csv", quote = FALSE)
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"epicardium"} 
+  else if (x == "1") {"cardiomyocyte"}
+}
+clean_cardiomyocyte$sub.type <- mapply(fun, clean_cardiomyocyte$SCT_snn_res.0.1)
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"epicardium"} 
+  else if (x == "1") {"cardiomyocyte"}
+}
+clean_cardiomyocyte$global.type <- mapply(fun, clean_cardiomyocyte$SCT_snn_res.0.1)
+```
+
+```{r}
+png(filename="./clean cardiomyocyte annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_cardiomyocyte, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+```{r}
+saveRDS(clean_cardiomyocyte, "./clean_cardiomyocyte.rds")
+```
+
+
+

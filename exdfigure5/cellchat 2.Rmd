@@ -1,0 +1,332 @@
+```{r}
+library(CellChat)
+library(patchwork)
+library(reticulate)
+options(stringsAsFactors = FALSE)
+#conda create --name clonebase --clone base
+#use_condaenv(condaenv = 'clonebase', conda = "C:/Users/fkady/anaconda3/Scripts/conda.exe")
+use_condaenv(condaenv = 'clonebase', conda = "C:/Users/Kadyrov/anaconda3/Scripts/conda.exe")
+
+library(Seurat)
+library(NMF)
+library(ggalluvial)
+library(ComplexHeatmap)
+```
+
+```{r}
+setwd("E:/reshif1 snseq/differential cell chat")
+```
+
+```{r}
+cellchat.wt <- readRDS("E:/reshif1 snseq/cellchat/cellchat_wt.rds")
+cellchat.ko <- readRDS("E:/reshif1 snseq/cellchat/cellchat_ko.rds")
+```
+
+```{r}
+object.list <- list(wt = cellchat.wt, ko = cellchat.ko)
+cellchat <- mergeCellChat(object.list, add.names = names(object.list))
+cellchat
+```
+
+```{r}
+save(object.list, file = "cellchat_object.list_wt_ko.RData")
+save(cellchat, file = "cellchat_merged_wt_ko.RData")
+```
+
+```{r}
+gg1 <- compareInteractions(cellchat, show.legend = F, group = c(1,2))
+gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2), measure = "weight")
+
+png(filename="./compare interactions and interaction strength.png", width=15, height=15, units="cm", res=300)
+gg1 + gg2
+dev.off()
+```
+
+#The differential number of interactions or interaction strength in the cell-cell communication network between two datasets can be visualized using circle plot, where red colored edges represent increased signaling in the second dataset compared to the first one.
+```{r}
+par(mfrow = c(1,2), xpd=TRUE)
+
+png(filename="./differential interactions circle plot.png", width=20, height=20, units="cm", res=300)
+netVisual_diffInteraction(cellchat, weight.scale = T)
+dev.off()
+
+png(filename="./differential interaction strength circle plot.png", width=20, height=20, units="cm", res=300)
+netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight")
+dev.off()
+```
+
+#heatmap differential interactions and interaction strength
+```{r}
+gg1 <- netVisual_heatmap(cellchat, color.heatmap = c('#2166ac','#b2182b'))
+#> Do heatmap based on a merged object
+gg2 <- netVisual_heatmap(cellchat, measure = "weight", color.heatmap = c('#2166ac','#b2182b'))
+#> Do heatmap based on a merged object
+
+png(filename="./differential interactions strengths heatmap.png", width=40, height=20, units="cm", res=300)
+gg1 + gg2
+dev.off()
+```
+
+```{r}
+weight.max <- getMaxWeight(object.list, attribute = c("idents","count"))
+par(mfrow = c(1,2), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_circle(object.list[[i]]@net$count, weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], edge.width.max = 12, title.name = paste0("Number of interactions - ", names(object.list)[i]))
+}
+```
+
+
+
+
+```{r}
+png(filename="./compare sources and targets.png", width=40, height=20, units="cm", res=300)
+num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
+gg <- list()
+for (i in 1:length(object.list)) {
+  gg[[i]] <- netAnalysis_signalingRole_scatter(object.list[[i]], title = names(object.list)[i], weight.MinMax = weight.MinMax)
+}
+#> Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
+#> Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
+patchwork::wrap_plots(plots = gg)
+dev.off()
+```
+
+```{r}
+png(filename="./signaling changes res.png", width=75, height=20, units="cm", res=300)
+gg1 <- netAnalysis_signalingChanges_scatter(cellchat, idents.use = "resident_mac")
+gg1
+dev.off()
+```
+
+```{r}
+cellchat <- computeNetSimilarityPairwise(cellchat, type = "functional")
+cellchat <- netEmbedding(cellchat, type = "functional")
+cellchat <- netClustering(cellchat, type = "functional")
+netVisual_embeddingPairwise(cellchat, type = "functional", label.size = 3.5)
+```
+
+```{r}
+cellchat <- computeNetSimilarityPairwise(cellchat, type = "structural")
+cellchat <- netEmbedding(cellchat, type = "structural")
+cellchat <- netClustering(cellchat, type = "structural")
+# Visualization in 2D-space
+netVisual_embeddingPairwise(cellchat, type = "structural", label.size = 3.5)
+netVisual_embeddingPairwiseZoomIn(cellchat, type = "structural", nCol = 2)
+```
+
+```{r}
+rankSimilarity(cellchat, type = "functional")
+```
+
+```{r}
+gg1 <- rankNet(cellchat, mode = "comparison", stacked = T, do.stat = TRUE)
+gg2 <- rankNet(cellchat, mode = "comparison", stacked = F, do.stat = TRUE)
+
+png(filename="./information flow.png", width=40, height=20, units="cm", res=300)
+gg1 + gg2
+dev.off()
+```
+
+```{r}
+i = 1
+# combining all the identified signaling pathways from different datasets 
+pathway.union <- union(object.list[[i]]@netP$pathways, object.list[[i+1]]@netP$pathways)
+ht1 = netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = "outgoing", signaling = pathway.union, title = names(object.list)[i], width = 5, height = 10)
+ht2 = netAnalysis_signalingRole_heatmap(object.list[[i+1]], pattern = "outgoing", signaling = pathway.union, title = names(object.list)[i+1], width = 5, height = 10)
+
+png(filename="./outgoing signaling.png", width=40, height=20, units="cm", res=300)
+draw(ht1 + ht2, ht_gap = unit(0.5, "cm"))
+dev.off()
+```
+
+```{r}
+i = 1
+# combining all the identified signaling pathways from different datasets 
+pathway.union <- union(object.list[[i]]@netP$pathways, object.list[[i+1]]@netP$pathways)
+ht1 = netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = "incoming", signaling = pathway.union, title = names(object.list)[i], width = 5, height = 10)
+ht2 = netAnalysis_signalingRole_heatmap(object.list[[i+1]], pattern = "incoming", signaling = pathway.union, title = names(object.list)[i+1], width = 5, height = 10)
+
+png(filename="./incoming signaling.png", width=40, height=20, units="cm", res=300)
+draw(ht1 + ht2, ht_gap = unit(0.5, "cm"))
+dev.off()
+```
+
+```{r}
+png(filename="./DiffProb ligand receptor pairs.png", width=30, height=30, units="cm", res=300)
+netVisual_bubble(cellchat, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibrobalst', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocte', 'smc', 'pdc', 'neuron'),  comparison = c(1, 2), angle.x = 45)
+dev.off()
+```
+
+```{r}
+gg1 <- netVisual_bubble(cellchat, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibrobalst', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocte', 'smc', 'pdc', 'neuron'),  comparison = c(1, 2), max.dataset = 2, title.name = "Increased signaling in KO", angle.x = 45, remove.isolate = T)
+#> Comparing communications on a merged object
+gg2 <- netVisual_bubble(cellchat, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibrobalst', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocte', 'smc', 'pdc', 'neuron'),  comparison = c(1, 2), max.dataset = 1, title.name = "Decreased signaling in KO", angle.x = 45, remove.isolate = T)
+#> Comparing communications on a merged object
+
+png(filename="./DiffProb ligand receptor pairs split.png", width=30, height=30, units="cm", res=300)
+gg1 + gg2
+dev.off()
+```
+
+
+#differential expression analysis
+```{r}
+# define a positive dataset, i.e., the dataset with positive fold change against the other dataset
+pos.dataset = "ko"
+# define a char name used for storing the results of differential expression analysis
+features.name = paste0(pos.dataset, ".merged")
+
+# perform differential expression analysis 
+# Of note, compared to CellChat version < v2, CellChat v2 now performs an ultra-fast Wilcoxon test using the presto package, which gives smaller values of logFC. Thus we here set a smaller value of thresh.fc compared to the original one (thresh.fc = 0.1). Users can also provide a vector and dataframe of customized DEGs by modifying the cellchat@var.features$LS.merged and cellchat@var.features$LS.merged.info. 
+
+cellchat <- identifyOverExpressedGenes(cellchat, group.dataset = "datasets", pos.dataset = pos.dataset, features.name = features.name, only.pos = FALSE, thresh.pc = 0.1, thresh.fc = 0.05,thresh.p = 0.05, group.DE.combined = FALSE) 
+#> Use the joint cell labels from the merged CellChat object
+
+# map the results of differential expression analysis onto the inferred cell-cell communications to easily manage/subset the ligand-receptor pairs of interest
+net <- netMappingDEG(cellchat, features.name = features.name, variable.all = TRUE)
+# extract the ligand-receptor pairs with upregulated ligands in ko
+net.up <- subsetCommunication(cellchat, net = net, datasets = "ko",ligand.logFC = 0.05, receptor.logFC = NULL)
+# extract the ligand-receptor pairs with upregulated ligands and upregulated receptors in wt, i.e.,downregulated in ko
+net.down <- subsetCommunication(cellchat, net = net, datasets = "wt",ligand.logFC = -0.05, receptor.logFC = NULL)
+```
+
+
+```{r}
+gene.up <- extractGeneSubsetFromPair(net.up, cellchat)
+gene.down <- extractGeneSubsetFromPair(net.down, cellchat)
+```
+
+```{r}
+pairLR.use.up = net.up[, "interaction_name", drop = F]
+gg1 <- netVisual_bubble(cellchat, pairLR.use = pairLR.use.up, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibrobalst', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocte', 'smc', 'pdc', 'neuron'), comparison = c(1, 2),  angle.x = 90, remove.isolate = T,title.name = paste0("Up-regulated signaling in ", names(object.list)[2]))
+#> Comparing communications on a merged object
+pairLR.use.down = net.down[, "interaction_name", drop = F]
+gg2 <- netVisual_bubble(cellchat, pairLR.use = pairLR.use.down, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibrobalst', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocte', 'smc', 'pdc', 'neuron'), comparison = c(1, 2),  angle.x = 90, remove.isolate = T,title.name = paste0("Down-regulated signaling in ", names(object.list)[2]))
+#> Comparing communications on a merged object
+png(filename="./DEX ligand receptor pairs split.png", width=30, height=30, units="cm", res=300)
+gg1 + gg2
+dev.off()
+```
+
+
+
+```{r}
+library(wordcloud)
+
+# visualize the enriched ligands in the first condition
+computeEnrichmentScore(net.down, species = 'mouse', variable.both = TRUE)
+```
+
+```{r}
+# visualize the enriched ligands in the second condition
+computeEnrichmentScore(net.up, species = 'mouse', variable.both = TRUE)
+```
+
+
+```{r}
+pathways.show <- c("GAS") 
+par(mfrow = c(1,2), xpd=TRUE)
+ht <- list()
+for (i in 1:length(object.list)) {
+  ht[[i]] <- netVisual_heatmap(object.list[[i]], signaling = pathways.show, color.heatmap = "Reds",title.name = paste(pathways.show, "signaling ",names(object.list)[i]))
+}
+#> Do heatmap based on a single object 
+#> 
+#> Do heatmap based on a single object
+ComplexHeatmap::draw(ht[[1]] + ht[[2]], ht_gap = unit(0.5, "cm"))
+```
+
+
+
+
+```{r}
+cellchat@meta$datasets = factor(cellchat@meta$datasets, levels = c("wt", "ko")) # set factor level
+plotGeneExpression(cellchat, signaling = c("SPP1"), split.by = "datasets", colors.ggplot = T)
+```
+
+
+
+```{r}
+cellchat@meta$datasets = factor(cellchat@meta$datasets, levels = c("wt", "ko")) # set factor level
+plotGeneExpression(cellchat, signaling = c("GAS"), split.by = "datasets", colors.ggplot = T)
+```
+
+
+```{r}
+png(filename="./chord diagram signaling up ko.png", width=30, height=15, units="cm", res=300)
+netVisual_chord_gene(object.list[[2]], sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'), slot.name = 'net', net = net.up, lab.cex = 0.8, small.gap = 3.5, title.name = paste0("Up-regulated signaling in ", names(object.list)[2]))
+dev.off()
+
+png(filename="./chord diagram signaling down ko.png", width=30, height=15, units="cm", res=300)
+netVisual_chord_gene(object.list[[1]], sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'), slot.name = 'net', net = net.down, lab.cex = 0.8, small.gap = 3.5, title.name = paste0("Down-regulated signaling in ", names(object.list)[2]))
+#> You may try the function `netVisual_chord_cell` for visualizing individual signaling pathway
+dev.off()
+```
+
+```{r}
+png(filename="./chord diagram gas.png", width=30, height=15, units="cm", res=300)
+pathways.show <- c("GAS") 
+weight.max <- getMaxWeight(object.list, slot.name = c("netP"), attribute = pathways.show) # control the edge weights across different datasets
+par(mfrow = c(1,2), xpd=TRUE)
+for (i in 1:length(object.list)) {
+  netVisual_aggregate(object.list[[i]], signaling = pathways.show, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'), layout = "circle", edge.weight.max = weight.max[1], edge.width.max = 10, signaling.name = paste(pathways.show, names(object.list)[i]))
+}
+dev.off()
+```
+
+
+```{r}
+save(object.list, file = "cellchat_object.list_wt_ko.RData")
+save(cellchat, file = "cellchat_merged_wt_ko.RData")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

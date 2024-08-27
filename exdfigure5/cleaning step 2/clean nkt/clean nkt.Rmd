@@ -1,0 +1,238 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("E:/reshif1 snseq/cleaning step 2/clean nkt")
+```
+
+```{r}
+nkt <- readRDS("E:/reshif1 snseq/cleaning step 2/nkt.rds")
+```
+
+#SCT transform and filter
+```{r}
+DefaultAssay(nkt) <- 'RNA'
+nkt <- SCTransform(nkt, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+nkt <- RunPCA(nkt, features = VariableFeatures(object = nkt), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(nkt, ndims = 50)
+```
+
+```{r}
+nkt <- RunUMAP(nkt, reduction = "pca", dims = 1:40)
+nkt <- FindNeighbors(nkt, reduction = "pca", dims = 1:40)
+nkt <- FindClusters(nkt, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(nkt, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(nkt, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(nkt, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(nkt, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(nkt, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(nkt, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(nkt, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(nkt, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(nkt, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(nkt, features = "Col1a1")
+FeaturePlot(nkt, features = "Dcn")
+FeaturePlot(nkt, features = "Itgam")
+FeaturePlot(nkt, features = "Siglece")
+FeaturePlot(nkt, features = "Klrc1")
+FeaturePlot(nkt, features = "Bank1")
+FeaturePlot(nkt, features = "Cd8a")
+FeaturePlot(nkt, features = "Il7r")
+FeaturePlot(nkt, features = "Kit")
+```
+
+
+```{r}
+DimPlot(nkt, group.by = "SCT_snn_res.0.9", label = TRUE, split.by = "condition")
+DimPlot(nkt, group.by = "SCT_snn_res.0.9", label = TRUE, split.by = "genotype")
+```
+
+```{r}
+png(filename="./nkt 09 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(nkt, group.by = "SCT_snn_res.0.9", label = TRUE)
+dev.off()
+
+png(filename="./nkt 09 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(nkt, group.by = "SCT_snn_res.0.9", label = FALSE)
+dev.off()
+
+saveRDS(nkt, "./nkt_postclustering.rds")
+nkt <- readRDS("./nkt_postclustering.rds")
+```
+
+
+```{r}
+DefaultAssay(nkt) <- 'SCT'
+Idents(nkt) <- "SCT_snn_res.0.9"
+rna.markers <- FindAllMarkers(nkt, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./nkt_DGE_GEX_res0.9.csv", quote = FALSE)
+```
+
+
+
+```{r}
+FeaturePlot(nkt, features = "propmt", split.by = "genotype", pt.size = 1)
+FeaturePlot(nkt, features = "nCount_RNA", split.by = "genotype", pt.size = 1)
+FeaturePlot(nkt, features = "nFeature_RNA", split.by = "genotype", pt.size = 1)
+```
+
+#annotate
+```{r}
+fun <- function(x) {
+  if (x == "0") {"tcells"} 
+  else if (x == "1") {"tcells"}
+  else if (x == "2") {"tcells"}
+  else if (x == "3") {"junk"}
+  else if (x == "4") {"nk"}
+  else if (x == "5") {"tcells"}
+  else if (x == "6") {"tcells"}
+  else if (x == "7") {"nk"}
+}
+nkt$sub.type <- mapply(fun, nkt$SCT_snn_res.0.9)
+```
+
+
+```{r}
+png(filename="./nkt annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(nkt, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+#clean reclustered object
+```{r}
+DefaultAssay(nkt) <- 'SCT'
+Idents(nkt) <- "sub.type"
+
+clean_nkt <- subset(nkt, idents = c('tcells', 'nk'))
+```
+
+
+
+```{r}
+DefaultAssay(clean_nkt) <- 'RNA'
+clean_nkt <- SCTransform(clean_nkt, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+clean_nkt <- RunPCA(clean_nkt, features = VariableFeatures(object = clean_nkt), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(clean_nkt, ndims = 50)
+```
+
+```{r}
+clean_nkt <- RunUMAP(clean_nkt, reduction = "pca", dims = 1:40)
+clean_nkt <- FindNeighbors(clean_nkt, reduction = "pca", dims = 1:40)
+clean_nkt <- FindClusters(clean_nkt, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(clean_nkt, features = "Col1a1")
+FeaturePlot(clean_nkt, features = "Dcn")
+FeaturePlot(clean_nkt, features = "Itgam")
+FeaturePlot(clean_nkt, features = "Siglece")
+FeaturePlot(clean_nkt, features = "Klrc1")
+FeaturePlot(clean_nkt, features = "Bank1")
+FeaturePlot(clean_nkt, features = "Cd8a")
+FeaturePlot(clean_nkt, features = "Il7r")
+FeaturePlot(clean_nkt, features = "Kit")
+```
+
+```{r}
+DefaultAssay(clean_nkt) <- 'SCT'
+Idents(clean_nkt) <- "SCT_snn_res.0.2"
+rna.markers <- FindAllMarkers(clean_nkt, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./clean_nkt_DGE_GEX_res0.2.csv", quote = FALSE)
+```
+
+```{r}
+png(filename="./clean_nkt 02 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.2", label = TRUE)
+dev.off()
+
+png(filename="./clean_nkt 02 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_nkt, group.by = "SCT_snn_res.0.2", label = FALSE)
+dev.off()
+```
+
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"tcell"} 
+  else if (x == "1") {"tcell"}
+  else if (x == "2") {"nk"}
+  else if (x == "3") {"tcell"}
+  else if (x == "4") {"tcell"}
+}
+clean_nkt$sub.type <- mapply(fun, clean_nkt$SCT_snn_res.0.2)
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"nkt"} 
+  else if (x == "1") {"nkt"}
+  else if (x == "2") {"nkt"}
+  else if (x == "3") {"nkt"}
+  else if (x == "4") {"nkt"}
+}
+clean_nkt$global.type <- mapply(fun, clean_nkt$SCT_snn_res.0.2)
+```
+
+```{r}
+png(filename="./clean_nkt annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_nkt, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+```{r}
+saveRDS(clean_nkt, "./clean_nkt.rds")
+```
+
+
+

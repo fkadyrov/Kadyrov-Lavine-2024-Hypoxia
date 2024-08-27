@@ -1,0 +1,680 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("E:/reshif1 snseq/cleaning step 2/clean myeloid")
+```
+
+```{r}
+myeloid <- readRDS("E:/reshif1 snseq/cleaning step 2/myeloid.rds")
+```
+
+```{r}
+DimPlot(myeloid)
+```
+
+
+#SCT transform and filter
+```{r}
+DefaultAssay(myeloid) <- 'RNA'
+myeloid <- SCTransform(myeloid, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+myeloid <- RunPCA(myeloid, features = VariableFeatures(object = myeloid), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(myeloid, ndims = 50)
+```
+
+```{r}
+myeloid <- RunUMAP(myeloid, reduction = "pca", dims = 1:40)
+myeloid <- FindNeighbors(myeloid, reduction = "pca", dims = 1:40)
+myeloid <- FindClusters(myeloid, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(myeloid, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(myeloid, features = "Lyve1")
+FeaturePlot(myeloid, features = "Cd163")
+FeaturePlot(myeloid, features = "Vsig4")
+FeaturePlot(myeloid, features = "Ly6c2")
+FeaturePlot(myeloid, features = "Plaur")
+FeaturePlot(myeloid, features = "Plac8")
+FeaturePlot(myeloid, features = "Isg15")
+FeaturePlot(myeloid, features = "Arg1")
+FeaturePlot(myeloid, features = "Fn1")
+FeaturePlot(myeloid, features = "Tppp3")
+FeaturePlot(myeloid, features = "Spp1")
+FeaturePlot(myeloid, features = "Trem2")
+FeaturePlot(myeloid, features = "H2-Aa")
+FeaturePlot(myeloid, features = "Mki67")
+FeaturePlot(myeloid, features = "Gdf15")
+FeaturePlot(myeloid, features = "Mertk")
+FeaturePlot(myeloid, features = "Cd109")
+FeaturePlot(myeloid, features = "Retnlg")
+FeaturePlot(myeloid, features = "Ccrl2")
+FeaturePlot(myeloid, features = "Cxcr2")
+FeaturePlot(myeloid, features = "Tnnt2")
+FeaturePlot(myeloid, features = "Wt1")
+FeaturePlot(myeloid, features = "Dcn")
+FeaturePlot(myeloid, features = "Col1a1")
+FeaturePlot(myeloid, features = "Bank1")
+FeaturePlot(myeloid, features = "Ccr7")
+```
+
+
+```{r}
+DimPlot(myeloid, group.by = "SCT_snn_res.0.6", label = TRUE, split.by = "condition")
+DimPlot(myeloid, group.by = "SCT_snn_res.0.6", label = TRUE, split.by = "genotype")
+```
+
+```{r}
+png(filename="./myeloid 06 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.6", label = TRUE)
+dev.off()
+
+png(filename="./myeloid 06 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(myeloid, group.by = "SCT_snn_res.0.6", label = FALSE)
+dev.off()
+
+saveRDS(myeloid, "./myeloid_postclustering.rds")
+myeloid <- readRDS("./myeloid_postclustering.rds")
+```
+
+
+```{r}
+DefaultAssay(myeloid) <- 'SCT'
+Idents(myeloid) <- "SCT_snn_res.0.6"
+rna.markers <- FindAllMarkers(myeloid, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./myeloid_DGE_GEX_res0.6.csv", quote = FALSE)
+```
+
+
+
+```{r}
+FeaturePlot(myeloid, features = "propmt", split.by = "genotype", pt.size = 1)
+FeaturePlot(myeloid, features = "nCount_RNA", split.by = "genotype", pt.size = 1)
+FeaturePlot(myeloid, features = "nFeature_RNA", split.by = "genotype", pt.size = 1)
+```
+
+#annotate
+```{r}
+fun <- function(x) {
+  if (x == "0") {"myeloid"} 
+  else if (x == "1") {"myeloid"}
+  else if (x == "2") {"myeloid"}
+  else if (x == "3") {"myeloid"}
+  else if (x == "4") {"fbjunk"}
+  else if (x == "5") {"myeloid"}
+  else if (x == "6") {"myeloid"}
+  else if (x == "7") {"junk"}
+  else if (x == "8") {"myeloid"}
+  else if (x == "9") {"myeloid"}
+  else if (x == "10") {"myeloid"}
+  else if (x == "11") {"junk"}
+  else if (x == "12") {"myeloid"}
+  else if (x == "13") {"myeloid"}
+  else if (x == "14") {"myeloid"}
+  else if (x == "15") {"junk"}
+}
+myeloid$sub.type <- mapply(fun, myeloid$SCT_snn_res.0.6)
+```
+
+
+
+```{r}
+png(filename="./myeloid annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(myeloid, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+#clean reclustered object
+```{r}
+DefaultAssay(myeloid) <- 'SCT'
+Idents(myeloid) <- "sub.type"
+
+clean_myeloid <- subset(myeloid, idents = c('myeloid'))
+```
+
+
+
+```{r}
+DefaultAssay(clean_myeloid) <- 'RNA'
+clean_myeloid <- SCTransform(clean_myeloid, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+clean_myeloid <- RunPCA(clean_myeloid, features = VariableFeatures(object = clean_myeloid), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(clean_myeloid, ndims = 50)
+```
+
+```{r}
+clean_myeloid <- RunUMAP(clean_myeloid, reduction = "pca", dims = 1:40)
+clean_myeloid <- FindNeighbors(clean_myeloid, reduction = "pca", dims = 1:40)
+clean_myeloid <- FindClusters(clean_myeloid, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(clean_myeloid, features = "Lyve1")
+FeaturePlot(clean_myeloid, features = "Cd163")
+FeaturePlot(clean_myeloid, features = "Vsig4")
+FeaturePlot(clean_myeloid, features = "Ly6c2")
+FeaturePlot(clean_myeloid, features = "Plaur")
+FeaturePlot(clean_myeloid, features = "Plac8")
+FeaturePlot(clean_myeloid, features = "Isg15")
+FeaturePlot(clean_myeloid, features = "Arg1")
+FeaturePlot(clean_myeloid, features = "Fn1")
+FeaturePlot(clean_myeloid, features = "Tppp3")
+FeaturePlot(clean_myeloid, features = "Spp1")
+FeaturePlot(clean_myeloid, features = "Trem2")
+FeaturePlot(clean_myeloid, features = "H2-Aa")
+FeaturePlot(clean_myeloid, features = "Mki67")
+FeaturePlot(clean_myeloid, features = "Gdf15")
+FeaturePlot(clean_myeloid, features = "Mertk")
+FeaturePlot(clean_myeloid, features = "Cd109")
+FeaturePlot(clean_myeloid, features = "Retnlg")
+FeaturePlot(clean_myeloid, features = "Ccrl2")
+FeaturePlot(clean_myeloid, features = "Cxcr2")
+FeaturePlot(clean_myeloid, features = "Tnnt2")
+FeaturePlot(clean_myeloid, features = "Wt1")
+FeaturePlot(clean_myeloid, features = "Dcn")
+FeaturePlot(clean_myeloid, features = "Col1a1")
+FeaturePlot(clean_myeloid, features = "Bank1")
+FeaturePlot(clean_myeloid, features = "Ccr7")
+FeaturePlot(clean_myeloid, features = "Fcgr3")
+```
+
+```{r}
+DefaultAssay(clean_myeloid) <- 'SCT'
+Idents(clean_myeloid) <- "SCT_snn_res.0.7"
+rna.markers <- FindAllMarkers(clean_myeloid, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./clean_myeloid_DGE_GEX_res0.7.csv", quote = FALSE)
+```
+
+```{r}
+png(filename="./clean_myeloid 07 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.7", label = TRUE)
+dev.off()
+
+png(filename="./clean_myeloid 07 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.7", label = FALSE)
+dev.off()
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"myeloid"} 
+  else if (x == "1") {"myeloid"}
+  else if (x == "2") {"resident_mac"}
+  else if (x == "3") {"myeloid"}
+  else if (x == "4") {"myeloid"}
+  else if (x == "5") {"myeloid"}
+  else if (x == "6") {"myeloid"}
+  else if (x == "7") {"myeloid"}
+  else if (x == "8") {"myeloid"}
+  else if (x == "9") {"myeloid"}
+  else if (x == "10") {"myeloid"}
+  else if (x == "11") {"myeloid"}
+  else if (x == "12") {"myeloid"}
+  else if (x == "13") {"myeloid"}
+}
+clean_myeloid$global.type <- mapply(fun, clean_myeloid$SCT_snn_res.0.7)
+```
+
+```{r}
+saveRDS(clean_myeloid, "./clean_myeloid.rds")
+```
+
+```{r}
+clean_myeloid <- readRDS("./clean_myeloid.rds")
+```
+
+```{r}
+clean_myeloid$genotype <- factor(x = clean_myeloid$genotype, levels = c("WT", "KO"))
+```
+
+```{r}
+clean_myeloid$condition <- factor(x = clean_myeloid$condition, levels = c("WT1", "WT2", "KO1", "KO2"))
+```
+
+```{r}
+DimPlot(clean_myeloid, group.by = "SCT_snn_res.0.7")
+```
+
+#umap of andrew z scores on mapped data
+```{r}
+#Ccl8
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zCcl8 <- c("Ccl8","Gas6","Fabp5")
+pops<-list(zCcl8)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$Ccl8_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "Ccl8_z")
+
+png(filename="./andrew z score Ccl8.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "Ccl8_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#MHCII
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zMHCII <- c("H2-Eb1", "H2-Aa", "Cd74", "H2-Ab1")
+pops<-list(zMHCII)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$MHCII_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "MHCII_z")
+
+png(filename="./andrew z score MHCII.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "MHCII_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Trem2
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zTrem2 <- c("Trem2", "Fabp5", "Ctsd", "Gpnmb")
+pops<-list(zTrem2)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$Trem2_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "Trem2_z")
+
+png(filename="./andrew z score Trem2.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "Trem2_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Gdf15
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zGdf15 <- c("Gdf15", "Tnf", "Ccl4")
+pops<-list(zGdf15)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$Gdf15_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "Gdf15_z")
+
+png(filename="./andrew z score Gdf15.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "Gdf15_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Res
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zRes <- c("Lyve1", "Folr2", "Cd163", "Cbr2")
+pops<-list(zRes)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$Res_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "Res_z")
+
+png(filename="./andrew z score Res.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "Res_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Arg1
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zArg1 <- c("Arg1", "Fn1", "Cxcl1", "Tppp3")
+pops<-list(zArg1)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$Arg1_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "Arg1_z")
+
+png(filename="./andrew z score Arg1.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "Arg1_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Prolif
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zProlif <- c("Mki67", "Top2a", "Stmn1")
+pops<-list(zProlif)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$Prolif_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "Prolif_z")
+
+png(filename="./andrew z score Prolif.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "Prolif_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#Mono
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zMono <- c("Plac8", "Ly6c2")
+pops<-list(zMono)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$Mono_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "Mono_z")
+
+png(filename="./andrew z score Mono.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "Mono_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#IFN
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zIFN <- c("Isg15", "Ifit3", "Irf7", "Cxcl10")
+pops<-list(zIFN)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$IFN_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "IFN_z")
+
+png(filename="./andrew z score IFN.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "IFN_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+
+#cDC2
+
+DefaultAssay(clean_myeloid) <- "SCT"
+expdata <- GetAssayData(clean_myeloid)
+zcDC2 <- c("Ifitm1", "Cd209a")
+pops<-list(zcDC2)
+#Z-Scores
+z_scores<-NULL
+
+for (i in 1:length(pops)) {
+genes <- pops[[i]]
+zz <- which(tolower(rownames(expdata)) %in% tolower(genes))
+av <- numeric(ncol(expdata))
+
+geneExp <- as.matrix(expdata[zz, ])
+geneExp <- t(scale(t(geneExp)))
+geneExp[is.nan(geneExp)] <- 0
+z_scores <- rbind(z_scores,(av + colSums(geneExp) / length(zz)))
+}
+clean_myeloid@meta.data$cDC2_z<-z_scores[1,]
+
+DotPlot(object = clean_myeloid, features = "cDC2_z")
+
+png(filename="./andrew z score cDC2.png", width=20, height=20, units="cm", res=300)
+FeaturePlot(clean_myeloid, features = "cDC2_z", pt.size = 2, reduction = "umap")  + coord_fixed() + scale_color_gradientn(colors=c("#0D0887FF", "#7E03A8FF", "#CC4678FF", "#F89441FF", "#F0F921FF"))
+dev.off()
+```
+
+#dot plot of z scores 
+```{r}
+#dot plot idents set to condition
+Idents(clean_myeloid) <- clean_myeloid$SCT_snn_res.0.7
+
+png(filename = "./clean myeloid z score dot plot across 07 res.png", width = 25, height = 20, units = "cm", res = 600)
+DotPlot(object = clean_myeloid, features = c("Trem2_z", "Gdf15_z", "MHCII_z", "IFN_z", "Prolif_z", "Arg1_z", "cDC2_z", "Mono_z", "Ccl8_z", "Res_z"))+
+  coord_fixed(ratio = 1)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+dev.off()
+
+```
+
+#new annotations
+```{r}
+fun <- function(x) {
+  if (x == "0") {"trem2_gdf15"} 
+  else if (x == "1") {"trem2_gdf15"}
+  else if (x == "2") {"resident_mac"}
+  else if (x == "3") {"mhcii"}
+  else if (x == "4") {"ifn"}
+  else if (x == "5") {"trem2_gdf15"}
+  else if (x == "6") {"prolif"}
+  else if (x == "7") {"trem2_gdf15"}
+  else if (x == "8") {"dc"}
+  else if (x == "9") {"mono"}
+  else if (x == "10") {"mono"}
+  else if (x == "11") {"arg1"}
+  else if (x == "12") {"dc"}
+  else if (x == "13") {"dc"}
+}
+clean_myeloid$sub.type <- mapply(fun, clean_myeloid$SCT_snn_res.0.7)
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"myeloid"} 
+  else if (x == "1") {"myeloid"}
+  else if (x == "2") {"resident_mac"}
+  else if (x == "3") {"myeloid"}
+  else if (x == "4") {"myeloid"}
+  else if (x == "5") {"myeloid"}
+  else if (x == "6") {"myeloid"}
+  else if (x == "7") {"myeloid"}
+  else if (x == "8") {"myeloid"}
+  else if (x == "9") {"myeloid"}
+  else if (x == "10") {"myeloid"}
+  else if (x == "11") {"myeloid"}
+  else if (x == "12") {"myeloid"}
+  else if (x == "13") {"myeloid"}
+}
+clean_myeloid$global.type <- mapply(fun, clean_myeloid$SCT_snn_res.0.7)
+```
+
+```{r}
+clean_myeloid$genotype <- factor(x = clean_myeloid$genotype, levels = c("WT", "KO"))
+```
+
+```{r}
+clean_myeloid$sub.type <- factor(x = clean_myeloid$sub.type, levels = c('trem2_gdf15', 'mhcii', 'ifn', 'prolif', 'arg1', 'dc', 'mono', 'resident_mac'))
+```
+
+```{r}
+png(filename="./clean_myeloid new annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_myeloid, group.by = "sub.type", label = FALSE, pt.size = 1.5)+
+  scale_color_manual(values = c("#920000","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#6db6ff","yellow2","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+```{r}
+png(filename="./clean_myeloid new annotate split.png", width=40, height=20, units="cm", res=600)
+DimPlot(clean_myeloid, group.by = "sub.type", label = FALSE, split.by = "genotype", pt.size = 1.5)+
+  scale_color_manual(values = c("#920000","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#6db6ff","yellow2","#ffb6db","#b6dbff","#924900"))
+dev.off()
+```
+
+```{r}
+png(filename="./clean_myeloid new annotate stacked barplot.png", width=40, height=20, units="cm", res=600)
+ggplot(clean_myeloid@meta.data, aes(x = genotype, fill = sub.type)) +
+  geom_bar(position = "fill", width = 0.95) +
+  xlab("Sample") +
+  ylab("Proportion") +
+  theme(legend.title = element_blank())+ coord_fixed(ratio=5)  +
+  theme(legend.text=element_text(size=25)) +
+  scale_fill_manual(values = c("#920000","#009292","#ff6db6","#490092","#006ddb","#24ff24","#db6d00","#6db6ff","yellow2","#ffb6db","#b6dbff","#924900"))+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(legend.text=element_text(size=25))+ 
+  theme(axis.text = element_text(size = 25))
+dev.off()
+```
+
+
+```{r}
+saveRDS(clean_myeloid, "./clean_myeloid.rds")
+```
+
+```{r}
+clean_myeloid <- readRDS("./clean_myeloid.rds")
+```
+
+
+#dot plot of z scores annotated
+```{r}
+#dot plot idents set to condition
+Idents(clean_myeloid) <- clean_myeloid$sub.type
+
+png(filename = "./clean myeloid z score dot plot across annotation.png", width = 25, height = 20, units = "cm", res = 600)
+DotPlot(object = clean_myeloid, features = c("Trem2_z", "Gdf15_z", "MHCII_z", "IFN_z", "Prolif_z", "Arg1_z", "cDC2_z", "Mono_z", "Ccl8_z", "Res_z"))+
+  coord_fixed(ratio = 1)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+dev.off()
+
+```
+

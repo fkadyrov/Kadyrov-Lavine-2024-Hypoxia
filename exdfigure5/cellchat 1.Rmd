@@ -1,0 +1,611 @@
+```{r}
+library(CellChat)
+library(patchwork)
+library(reticulate)
+options(stringsAsFactors = FALSE)
+#conda create --name clonebase --clone base
+#use_condaenv(condaenv = 'clonebase', conda = "C:/Users/fkady/anaconda3/Scripts/conda.exe")
+use_condaenv(condaenv = 'clonebase', conda = "C:/Users/Kadyrov/anaconda3/Scripts/conda.exe")
+
+library(Seurat)
+library(NMF)
+library(ggalluvial)
+```
+
+```{r}
+setwd("E:/reshif1 snseq/cellchat")
+```
+
+```{r}
+merged <- readRDS("E:/reshif1 snseq/cleaned global object/cleaned_annotated.rds")
+DimPlot(merged, group.by = "global.type")
+```
+
+```{r}
+Idents(merged) <- "genotype"
+
+mergedwt <- subset(merged, idents = c('WT'))
+mergedko <- subset(merged, idents = c('KO'))
+```
+
+```{r}
+rm(merged)
+gc()
+```
+
+
+```{r}
+cellchatko <- createCellChat(mergedko, group.by = "global.type", assay = "SCT")
+```
+
+```{r}
+CellChatDB <- CellChatDB.mouse
+showDatabaseCategory(CellChatDB)
+```
+
+```{r}
+#dplyr::glimpse(CellChatDB$interaction)
+```
+
+```{r}
+#CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling", key = "annotation")
+CellChatDB.use <- CellChatDB 
+```
+
+```{r}
+cellchatko@DB <- CellChatDB.use
+```
+
+```{r}
+cellchatko <- subsetData(cellchatko)
+future::plan("multisession", workers = 4)
+cellchatko <- identifyOverExpressedGenes(cellchatko)
+cellchatko <- identifyOverExpressedInteractions(cellchatko)
+
+```
+
+```{r}
+#this is optional, have to set raw.use = FALSE in computeCommunProb()
+#cellchat <- projectData(cellchat, PPI.mouse)  
+```
+
+```{r}
+
+cellchatko <- computeCommunProb(cellchatko, type = "triMean")
+```
+
+```{r}
+cellchatko <- filterCommunication(cellchatko, min.cells = 10)
+```
+
+
+```{r}
+df.net <- subsetCommunication(cellchatko)
+```
+
+```{r}
+write.csv(df.net,"cell-cell communications ko.csv")
+```
+
+```{r}
+cellchatko <- computeCommunProbPathway(cellchatko)
+```
+
+```{r}
+cellchatko <- aggregateNet(cellchatko)
+```
+
+```{r}
+groupSize <- as.numeric(table(cellchatko@idents))
+
+par(mfrow = c(1,2), xpd=TRUE)
+
+png(filename="./ko number of interactions circle plot.png", width=20, height=20, units="cm", res=300)
+netVisual_circle(cellchatko@net$count, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Number of interactions")
+dev.off()
+
+png(filename="./ko interactions weight strength circle plot.png", width=20, height=20, units="cm", res=300)
+netVisual_circle(cellchatko@net$weight, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Interaction weights/strength")
+dev.off()
+```
+
+```{r}
+png(filename="./ko interactions weight strength by population.png", width=50, height=50, units="cm", res=300)
+mat <- cellchatko@net$weight
+par(mfrow = c(4,4), xpd=TRUE)
+for (i in 1:nrow(mat)) {
+  mat2 <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
+  mat2[i, ] <- mat[i, ]
+  netVisual_circle(mat2, vertex.weight = groupSize, weight.scale = T, edge.weight.max = max(mat), title.name = rownames(mat)[i])
+}
+dev.off()
+```
+
+```{r}
+df.net.res <- subsetCommunication(cellchatko, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'))
+```
+
+```{r}
+write.csv(df.net.res,"res-source communications ko.csv")
+```
+
+
+
+```{r}
+png(filename="./ko bubble plot resident source.png", width=30, height=30, units="cm", res=300)
+netVisual_bubble(cellchatko, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'), remove.isolate = FALSE)
+dev.off()
+```
+
+
+```{r}
+png(filename="./ko bubble plot resident source spp1 gas bst2.png", width=15, height=15, units="cm", res=300)
+netVisual_bubble(cellchatko, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'), signaling = c("SPP1","GAS", "BST2"), remove.isolate = FALSE)
+dev.off()
+```
+
+#SPP1 Signaling Pathway Network
+```{r}
+# Compute the network centrality scores
+cellchatko <- netAnalysis_computeCentrality(cellchatko, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
+```
+
+# Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
+
+#SPP1
+```{r}
+png(filename="./ko signaling roles spp1.png", width=15, height=15, units="cm", res=300)
+netAnalysis_signalingRole_network(cellchatko, signaling = "SPP1", width = 8, height = 2.5, font.size = 10)
+dev.off()
+```
+
+#GAS
+```{r}
+png(filename="./ko signaling roles gas.png", width=15, height=15, units="cm", res=300)
+netAnalysis_signalingRole_network(cellchatko, signaling = "GAS", width = 8, height = 2.5, font.size = 10)
+dev.off()
+```
+
+
+
+
+
+
+# Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
+```{r}
+ht1 <- netAnalysis_signalingRole_heatmap(cellchatko, pattern = "outgoing")
+ht2 <- netAnalysis_signalingRole_heatmap(cellchatko, pattern = "incoming")
+
+png(filename="./ko signaling role analysis.png", width=40, height=40, units="cm", res=300)
+ht1 + ht2
+dev.off()
+```
+
+#identify and visualize outgoing communication pattern of secreting cells
+```{r}
+png(filename="./ko cophenetic and silhouette outgoing.png", width=40, height=20, units="cm", res=300)
+selectK(cellchatko, pattern = "outgoing")
+dev.off()
+
+#values drop when patterns greater than 3
+```
+
+```{r}
+nPatterns = 3
+```
+
+```{r}
+png(filename="./ko outgoing communication patterns.png", width=40, height=20, units="cm", res=300)
+cellchatko <- identifyCommunicationPatterns(cellchatko, pattern = "outgoing", k = nPatterns)
+dev.off()
+```
+
+
+```{r}
+# river plot
+png(filename="./ko outgoing river plot.png", width=40, height=20, units="cm", res=300)
+netAnalysis_river(cellchatko, pattern = "outgoing")
+dev.off()
+#> Please make sure you have load `library(ggalluvial)` when running this function
+```
+
+```{r}
+# dot plot
+png(filename="./ko outgoing dot plot.png", width=30, height=20, units="cm", res=300)
+netAnalysis_dot(cellchatko, pattern = "outgoing")
+dev.off()
+```
+
+#identify and visualize incoming communication pattern of secreting cells
+```{r}
+png(filename="./ko cophenetic and silhouette incoming.png", width=40, height=20, units="cm", res=300)
+selectK(cellchatko, pattern = "incoming")
+dev.off()
+
+#values drop when patterns greater than 3
+```
+
+```{r}
+nPatterns = 3
+```
+
+```{r}
+png(filename="./ko incoming communication patterns.png", width=40, height=20, units="cm", res=300)
+cellchatko <- identifyCommunicationPatterns(cellchatko, pattern = "incoming", k = nPatterns)
+dev.off()
+```
+
+```{r}
+# river plot
+png(filename="./ko incoming river plot.png", width=40, height=20, units="cm", res=300)
+netAnalysis_river(cellchatko, pattern = "incoming")
+dev.off()
+#> Please make sure you have load `library(ggalluvial)` when running this function
+```
+
+```{r}
+# dot plot
+png(filename="./ko incoming dot plot.png", width=30, height=20, units="cm", res=300)
+netAnalysis_dot(cellchatko, pattern = "incoming")
+dev.off()
+```
+
+```{r}
+cellchatko <- computeNetSimilarity(cellchatko, type = "functional")
+cellchatko <- netEmbedding(cellchatko, type = "functional")
+#> Manifold learning of the signaling networks for a single dataset
+cellchatko <- netClustering(cellchatko, type = "functional")
+#> Classification learning of the signaling networks for a single dataset
+# Visualization in 2D-space
+netVisual_embedding(cellchatko, type = "functional", label.size = 3.5)
+```
+
+```{r}
+cellchatko <- computeNetSimilarity(cellchatko, type = "structural")
+cellchatko <- netEmbedding(cellchatko, type = "structural")
+#> Manifold learning of the signaling networks for a single dataset
+cellchatko <- netClustering(cellchatko, type = "structural")
+#> Classification learning of the signaling networks for a single dataset
+# Visualization in 2D-space
+netVisual_embedding(cellchatko, type = "structural", label.size = 3.5)
+```
+
+
+```{r}
+saveRDS(cellchatko, file = "cellchat_ko.rds")
+```
+
+
+
+```{r}
+cellchatwt <- createCellChat(mergedwt, group.by = "global.type", assay = "SCT")
+```
+
+```{r}
+CellChatDB <- CellChatDB.mouse
+showDatabaseCategory(CellChatDB)
+```
+
+```{r}
+#dplyr::glimpse(CellChatDB$interaction)
+```
+
+```{r}
+#CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling", key = "annotation")
+CellChatDB.use <- CellChatDB 
+```
+
+```{r}
+cellchatwt@DB <- CellChatDB.use
+```
+
+```{r}
+cellchatwt <- subsetData(cellchatwt)
+future::plan("multisession", workers = 4)
+cellchatwt <- identifyOverExpressedGenes(cellchatwt)
+cellchatwt <- identifyOverExpressedInteractions(cellchatwt)
+
+```
+
+```{r}
+#this is optional, have to set raw.use = FALSE in computeCommunProb()
+#cellchat <- projectData(cellchat, PPI.mouse)  
+```
+
+```{r}
+
+cellchatwt <- computeCommunProb(cellchatwt, type = "triMean")
+```
+
+```{r}
+cellchatwt <- filterCommunication(cellchatwt, min.cells = 10)
+```
+
+
+```{r}
+df.net <- subsetCommunication(cellchatwt)
+```
+
+```{r}
+write.csv(df.net,"cell-cell communications wt.csv")
+```
+
+```{r}
+cellchatwt <- computeCommunProbPathway(cellchatwt)
+```
+
+```{r}
+cellchatwt <- aggregateNet(cellchatwt)
+```
+
+```{r}
+groupSize <- as.numeric(table(cellchatwt@idents))
+
+par(mfrow = c(1,2), xpd=TRUE)
+
+png(filename="./wt number of interactions circle plot.png", width=20, height=20, units="cm", res=300)
+netVisual_circle(cellchatwt@net$count, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Number of interactions")
+dev.off()
+
+png(filename="./wt interactions weight strength circle plot.png", width=20, height=20, units="cm", res=300)
+netVisual_circle(cellchatwt@net$weight, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Interaction weights/strength")
+dev.off()
+```
+
+```{r}
+png(filename="./wt interactions weight strength by population.png", width=50, height=20, units="cm", res=300)
+mat <- cellchatwt@net$weight
+par(mfrow = c(2,5), xpd=TRUE)
+for (i in 1:nrow(mat)) {
+  mat2 <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
+  mat2[i, ] <- mat[i, ]
+  netVisual_circle(mat2, vertex.weight = groupSize, weight.scale = T, edge.weight.max = max(mat), title.name = rownames(mat)[i])
+}
+dev.off()
+```
+
+```{r}
+df.net.res <- subsetCommunication(cellchatwt, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'))
+```
+
+```{r}
+write.csv(df.net.res,"res communications wt.csv")
+```
+
+#spp1 heatmap
+```{r}
+#pathways.show <- c("SPP1")
+
+png(filename="./wt SPP1 signaling network heatmap.png", width=20, height=20, units="cm", res=300)
+par(mfrow=c(1,1))
+netVisual_heatmap(cellchatwt, signaling = "SPP1", color.heatmap = "Reds")
+dev.off()
+```
+
+```{r}
+png(filename="./wt SPP1 net contribution.png", width=10, height=10, units="cm", res=300)
+netAnalysis_contribution(cellchatwt, signaling = "SPP1")
+dev.off
+```
+
+#spp1-cd44 heatmap
+```{r}
+
+png(filename="./wt SPP1 CD44 signaling network heatmap.png", width=20, height=20, units="cm", res=300)
+par(mfrow=c(1,1))
+netVisual_heatmap(cellchatwt, signaling = "SPP1", color.heatmap = "Reds")
+dev.off()
+```
+
+#GAS heatmap
+```{r}
+#pathways.show <- c("SPP1")
+
+png(filename="./wt GAS signaling network heatmap.png", width=20, height=20, units="cm", res=300)
+par(mfrow=c(1,1))
+netVisual_heatmap(cellchatwt, signaling = "GAS", color.heatmap = "Reds")
+dev.off()
+```
+
+```{r}
+png(filename="./wt GAS net contribution.png", width=10, height=10, units="cm", res=300)
+netAnalysis_contribution(cellchatwt, signaling = "GAS")
+dev.off
+```
+
+
+
+```{r}
+png(filename="./wt bubble plot resident source.png", width=30, height=30, units="cm", res=300)
+netVisual_bubble(cellchatwt, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'), remove.isolate = FALSE)
+dev.off()
+```
+
+
+```{r}
+png(filename="./wt bubble plot resident source spp1 gas .png", width=15, height=15, units="cm", res=300)
+netVisual_bubble(cellchatwt, sources.use = "resident_mac", targets.use = c('myeloid', 'neutrophil', 'fibroblast', 'endocardial', 'endothelial', 'pericyte', 'epicardium', 'nkt', 'cardiomyocyte', 'lymphatic', 'bcell', 'adipocyte', 'smc', 'pdc', 'neuron'), signaling = c("SPP1","GAS"), remove.isolate = FALSE)
+dev.off()
+```
+
+#SPP1 Signaling Pathway Network
+```{r}
+# Compute the network centrality scores
+cellchatwt <- netAnalysis_computeCentrality(cellchatwt, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
+```
+
+# Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
+
+#SPP1
+```{r}
+png(filename="./wt signaling roles spp1.png", width=15, height=15, units="cm", res=300)
+netAnalysis_signalingRole_network(cellchatwt, signaling = "SPP1", width = 8, height = 2.5, font.size = 10)
+dev.off()
+```
+
+#GAS
+```{r}
+png(filename="./wt signaling roles gas.png", width=15, height=15, units="cm", res=300)
+netAnalysis_signalingRole_network(cellchatwt, signaling = "GAS", width = 8, height = 2.5, font.size = 10)
+dev.off()
+```
+
+
+
+
+#dominant senders and receivers
+```{r}
+# Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
+gg1 <- netAnalysis_signalingRole_scatter(cellchatwt)
+#> Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
+# Signaling role analysis on the cell-cell communication networks of interest
+gg2 <- netAnalysis_signalingRole_scatter(cellchatwt, signaling = c("SPP1", "GAS"))
+#> Signaling role analysis on the cell-cell communication network from user's input
+
+png(filename="./wt dominant senders and recievers.png", width=40, height=15, units="cm", res=300)
+gg1 + gg2
+dev.off()
+```
+
+# Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
+```{r}
+ht1 <- netAnalysis_signalingRole_heatmap(cellchatwt, pattern = "outgoing")
+ht2 <- netAnalysis_signalingRole_heatmap(cellchatwt, pattern = "incoming")
+
+png(filename="./wt signaling role analysis.png", width=40, height=20, units="cm", res=300)
+ht1 + ht2
+dev.off()
+```
+
+#identify and visualize outgoing communication pattern of secreting cells
+```{r}
+png(filename="./wt cophenetic and silhouette outgoing.png", width=40, height=20, units="cm", res=300)
+selectK(cellchatwt, pattern = "outgoing")
+dev.off()
+
+#values drop when patterns greater than 3
+```
+
+```{r}
+nPatterns = 3
+```
+
+```{r}
+png(filename="./wt outgoing communication patterns.png", width=40, height=20, units="cm", res=300)
+cellchatwt <- identifyCommunicationPatterns(cellchatwt, pattern = "outgoing", k = nPatterns)
+dev.off()
+```
+
+
+```{r}
+# river plot
+png(filename="./wt outgoing river plot.png", width=40, height=20, units="cm", res=300)
+netAnalysis_river(cellchatwt, pattern = "outgoing")
+dev.off()
+#> Please make sure you have load `library(ggalluvial)` when running this function
+```
+
+```{r}
+# dot plot
+png(filename="./wt outgoing dot plot.png", width=30, height=20, units="cm", res=300)
+netAnalysis_dot(cellchatwt, pattern = "outgoing")
+dev.off()
+```
+
+#identify and visualize incoming communication pattern of secreting cells
+```{r}
+png(filename="./wt cophenetic and silhouette incoming.png", width=40, height=20, units="cm", res=300)
+selectK(cellchatwt, pattern = "incoming")
+dev.off()
+
+#values drop when patterns greater than 3
+```
+
+```{r}
+nPatterns = 3
+```
+
+```{r}
+png(filename="./wt incoming communication patterns.png", width=40, height=20, units="cm", res=300)
+cellchatwt <- identifyCommunicationPatterns(cellchatwt, pattern = "incoming", k = nPatterns)
+dev.off()
+```
+
+```{r}
+# river plot
+png(filename="./wt incoming river plot.png", width=40, height=20, units="cm", res=300)
+netAnalysis_river(cellchatwt, pattern = "incoming")
+dev.off()
+#> Please make sure you have load `library(ggalluvial)` when running this function
+```
+
+```{r}
+# dot plot
+png(filename="./wt incoming dot plot.png", width=30, height=20, units="cm", res=300)
+netAnalysis_dot(cellchatwt, pattern = "incoming")
+dev.off()
+```
+
+```{r}
+cellchatwt <- computeNetSimilarity(cellchatwt, type = "functional")
+cellchatwt <- netEmbedding(cellchatwt, type = "functional")
+#> Manifold learning of the signaling networks for a single dataset
+cellchatwt <- netClustering(cellchatwt, type = "functional")
+#> Classification learning of the signaling networks for a single dataset
+# Visualization in 2D-space
+netVisual_embedding(cellchatwt, type = "functional", label.size = 3.5)
+```
+
+```{r}
+cellchatwt <- computeNetSimilarity(cellchatwt, type = "structural")
+cellchatwt <- netEmbedding(cellchatwt, type = "structural")
+#> Manifold learning of the signaling networks for a single dataset
+cellchatwt <- netClustering(cellchatwt, type = "structural")
+#> Classification learning of the signaling networks for a single dataset
+# Visualization in 2D-space
+netVisual_embedding(cellchatwt, type = "structural", label.size = 3.5)
+```
+
+
+```{r}
+saveRDS(cellchatwt, file = "cellchat_wt.rds")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

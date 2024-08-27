@@ -1,0 +1,253 @@
+
+```{r}
+library(dplyr)
+library(stringr)
+library(viridis)
+library(Seurat)
+library(patchwork)
+library(sctransform)
+library(ggplot2)
+library(harmony)
+library(ggsci)
+library(ggpubr)
+library(pheatmap)
+library(Matrix)
+library(RColorBrewer)
+library(scales)
+library(data.table)
+library(stats)
+library(tibble)
+library(tidyr)
+library(RSpectra)
+library(SeuratDisk)
+```
+
+```{r}
+setwd("E:/reshif1 snseq/cleaning step 2/clean endothelial")
+```
+
+```{r}
+endothelial <- readRDS("E:/reshif1 snseq/cleaning step 2/endothelial.rds")
+```
+
+#SCT transform and filter
+```{r}
+DefaultAssay(endothelial) <- 'RNA'
+endothelial <- SCTransform(endothelial, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+endothelial <- RunPCA(endothelial, features = VariableFeatures(object = endothelial), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(endothelial, ndims = 50)
+```
+
+```{r}
+endothelial <- RunUMAP(endothelial, reduction = "pca", dims = 1:40)
+endothelial <- FindNeighbors(endothelial, reduction = "pca", dims = 1:40)
+endothelial <- FindClusters(endothelial, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(endothelial, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(endothelial, features = "Vwf")
+FeaturePlot(endothelial, features = "Nfatc1")
+FeaturePlot(endothelial, features = "Nrg1")
+FeaturePlot(endothelial, features = "Npr3")
+FeaturePlot(endothelial, features = "Cd36")
+FeaturePlot(endothelial, features = "Ackr1")
+FeaturePlot(endothelial, features = "Hey1")
+FeaturePlot(endothelial, features = "Kit")
+FeaturePlot(endothelial, features = "Dkk2")
+FeaturePlot(endothelial, features = "Efnb2")
+FeaturePlot(endothelial, features = "Col4a1")
+FeaturePlot(endothelial, features = "Dcn")
+```
+
+
+```{r}
+DimPlot(endothelial, group.by = "SCT_snn_res.0.8", label = TRUE, split.by = "condition")
+DimPlot(endothelial, group.by = "SCT_snn_res.0.8", label = TRUE, split.by = "genotype")
+```
+
+```{r}
+png(filename="./endothelial 08 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.8", label = TRUE)
+dev.off()
+
+png(filename="./endothelial 08 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(endothelial, group.by = "SCT_snn_res.0.8", label = FALSE)
+dev.off()
+
+saveRDS(endothelial, "./endothelial_postclustering.rds")
+endothelial <- readRDS("./endothelial_postclustering.rds")
+```
+
+
+```{r}
+DefaultAssay(endothelial) <- 'SCT'
+Idents(endothelial) <- "SCT_snn_res.0.8"
+rna.markers <- FindAllMarkers(endothelial, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./endothelial_DGE_GEX_res0.8.csv", quote = FALSE)
+```
+
+
+
+```{r}
+FeaturePlot(endothelial, features = "propmt", split.by = "genotype", pt.size = 1)
+FeaturePlot(endothelial, features = "nCount_RNA", split.by = "genotype", pt.size = 1)
+FeaturePlot(endothelial, features = "nFeature_RNA", split.by = "genotype", pt.size = 1)
+```
+
+#annotate
+
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"endothelial"} 
+  else if (x == "1") {"endocardial"}
+  else if (x == "2") {"endocardial"}
+  else if (x == "3") {"endothelial"}
+  else if (x == "4") {"endothelial"}
+  else if (x == "5") {"endocardial"}
+  else if (x == "6") {"junk"}
+  else if (x == "7") {"endocardial"}
+  else if (x == "8") {"junk"}
+  else if (x == "9") {"endothelial"}
+  else if (x == "10") {"endothelial"}
+  else if (x == "11") {"endocardial"}
+  else if (x == "12") {"junk"}
+}
+endothelial$sub.type <- mapply(fun, endothelial$SCT_snn_res.0.8)
+```
+
+```{r}
+png(filename="./endothelial annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(endothelial, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+#clean reclustered object
+```{r}
+DefaultAssay(endothelial) <- 'SCT'
+Idents(endothelial) <- "sub.type"
+
+clean_endothelial <- subset(endothelial, idents = c('endocardial', 'endothelial'))
+```
+
+
+
+```{r}
+DefaultAssay(clean_endothelial) <- 'RNA'
+clean_endothelial <- SCTransform(clean_endothelial, vars.to.regress = c("propmt", "nCount_RNA"), verbose = TRUE)
+```
+
+```{r}
+clean_endothelial <- RunPCA(clean_endothelial, features = VariableFeatures(object = clean_endothelial), npcs=100, verbose=TRUE)
+```
+
+```{r}
+ElbowPlot(clean_endothelial, ndims = 50)
+```
+
+```{r}
+clean_endothelial <- RunUMAP(clean_endothelial, reduction = "pca", dims = 1:40)
+clean_endothelial <- FindNeighbors(clean_endothelial, reduction = "pca", dims = 1:40)
+clean_endothelial <- FindClusters(clean_endothelial, graph.name = "SCT_snn", algorithm = 3, resolution = c(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9), verbose = FALSE)
+```
+
+```{r}
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.1", label = TRUE)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.2", label = TRUE)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.3", label = TRUE)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.4", label = TRUE)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.5", label = TRUE)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.6", label = TRUE)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.7", label = TRUE)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.8", label = TRUE)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.9", label = TRUE)
+```
+
+```{r}
+FeaturePlot(clean_endothelial, features = "Vwf")
+FeaturePlot(clean_endothelial, features = "Nfatc1")
+FeaturePlot(clean_endothelial, features = "Nrg1")
+FeaturePlot(clean_endothelial, features = "Npr3")
+FeaturePlot(clean_endothelial, features = "Cd36")
+FeaturePlot(clean_endothelial, features = "Ackr1")
+FeaturePlot(clean_endothelial, features = "Hey1")
+FeaturePlot(clean_endothelial, features = "Kit")
+FeaturePlot(clean_endothelial, features = "Dkk2")
+FeaturePlot(clean_endothelial, features = "Efnb2")
+FeaturePlot(clean_endothelial, features = "Col4a1")
+FeaturePlot(clean_endothelial, features = "Dcn")
+FeaturePlot(clean_endothelial, features = "Mki67")
+```
+
+```{r}
+DefaultAssay(clean_endothelial) <- 'SCT'
+Idents(clean_endothelial) <- "SCT_snn_res.0.2"
+rna.markers <- FindAllMarkers(clean_endothelial, only.pos = TRUE, min.pct = 0.1, logfc.threshold = 0.25)
+write.csv(rna.markers, file ="./clean_endothelial_DGE_GEX_res0.2.csv", quote = FALSE)
+```
+
+```{r}
+png(filename="./clean_endothelial 02 res.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.2", label = TRUE)
+dev.off()
+
+png(filename="./clean_endothelial 02 res no labels.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_endothelial, group.by = "SCT_snn_res.0.2", label = FALSE)
+dev.off()
+```
+
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"endothelial"} 
+  else if (x == "1") {"endocardial"}
+  else if (x == "2") {"endocardial"}
+  else if (x == "3") {"endocardial"}
+  else if (x == "4") {"endothelial"}
+  else if (x == "5") {"endothelial"}
+}
+clean_endothelial$sub.type <- mapply(fun, clean_endothelial$SCT_snn_res.0.2)
+```
+
+```{r}
+fun <- function(x) {
+  if (x == "0") {"endothelial"} 
+  else if (x == "1") {"endocardial"}
+  else if (x == "2") {"endocardial"}
+  else if (x == "3") {"endocardial"}
+  else if (x == "4") {"endothelial"}
+  else if (x == "5") {"endothelial"}
+}
+clean_endothelial$global.type <- mapply(fun, clean_endothelial$SCT_snn_res.0.2)
+```
+
+```{r}
+png(filename="./clean_endothelial annotate.png", width=25, height=20, units="cm", res=600)
+DimPlot(clean_endothelial, group.by = "sub.type", label = FALSE)
+dev.off()
+```
+
+```{r}
+saveRDS(clean_endothelial, "./clean_endothelial.rds")
+```
+
+
+
